@@ -1,6 +1,72 @@
 {
-  "version": "1.0.0",
-  "mandatory": false,
-  "notes": "Первая версия Svpn",
-  "files": []
+ "version": "1.1.0",
+ "notes": "Установщик для команды; если подписки нет — окно само открывает Настройки",
+ "mandatory": false,
+ "files": [
+  {
+   "path": "app.py",
+   "sha256": "2cbb1141519d7fae62933ea18f9c1185e6331a7f3ddd62a2f1935338c47c6328",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
+  },
+  {
+   "path": "engine.py",
+   "sha256": "60c3622e2928cc485237472441bfe08ba12b21ee431192ce493d0fde695c27bd",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/engine.py"
+  },
+  {
+   "path": "bin/geoip.dat",
+   "sha256": "744c97b74c52bae2ac8664fef6ac481d7765cb8432a0df54f0368a88b9b4a354",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/bin/geoip.dat"
+  },
+  {
+   "path": "bin/geosite.dat",
+   "sha256": "adf92de0cfc70e458b399f04c5f912bf42d115ed7e37281b30e2f1c68605e4e9",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/bin/geosite.dat"
+  },
+  {
+   "path": "bin/sing-box.exe",
+   "sha256": "5c19bb3f8c12d4e85b3d47fe63123a7624b314b58dd7a8e32f51004f1c4d2faf",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/bin/sing-box.exe"
+  },
+  {
+   "path": "bin/xray.exe",
+   "sha256": "15c2d007954ac53ba69b80ec91242786b3c0b71d52649165b4ca1d5cc96ef8f1",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/bin/xray.exe"
+  },
+  {
+   "path": "ui/favicon.png",
+   "sha256": "8e0326a212bdbc76da3599daa62fda90ec26bf9f6f035fa15cc3a7e8bc6f8449",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/ui/favicon.png"
+  },
+  {
+   "path": "ui/index.html",
+   "sha256": "a1747f044a9c5d588e6d993fe5e374d76c3d73d8cfb80f023ba294a3d3391066",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/ui/index.html"
+  },
+  {
+   "path": "ui/svpn.ico",
+   "sha256": "b149e6da6d28f0fd6de256fe0872641a5efdd323a0e884858e819bbdd5f6809a",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/ui/svpn.ico"
+  },
+  {
+   "path": "ui/svpn.png",
+   "sha256": "a4dabbb1413c96dc5a98f4d09fc0191e8e123d8a8b92cd71e46ac0c85352b8c4",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/ui/svpn.png"
+  },
+  {
+   "path": "ui/tray-off.png",
+   "sha256": "e4fa227b95818cb0517febad1a5c81b0ca20c0d2ef2ea63a07be9d12019806f8",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/ui/tray-off.png"
+  },
+  {
+   "path": "ui/tray-ok.png",
+   "sha256": "45d8b7169605caa62c3aadcb7043e5125d66728ab0c08e4c08abab37d369221b",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/ui/tray-ok.png"
+  },
+  {
+   "path": "ui/tray-warn.png",
+   "sha256": "c5c6dfb1d1c186e8e87a3bff3980f45c854d65e9ecde7ec74651f3995cf294b5",
+   "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/ui/tray-warn.png"
+  }
+ ]
 }
