@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="ru" data-theme="night">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Svpn</title>
+<link rel="icon" href="/favicon.png">
+<style>
+/* Svpn — три темы: «Ночь» (тёмная), «Облачко» (призматическое, светлое), «Луч» (солнечные лучи).
+   Всё оформление живёт в переменных ниже; разметка и логика от темы не зависят. */
+:root, [data-theme="night"] {
+  --bg: #121014;
+  --aura:
+    radial-gradient(60% 45% at 92% 2%, rgba(255,106,176,.24), transparent 70%),
+    radial-gradient(50% 40% at 4% 38%, rgba(108,226,186,.13), transparent 70%),
+    radial-gradient(55% 45% at 96% 78%, rgba(112,170,255,.15), transparent 70%),
+    radial-gradient(45% 35% at 30% 105%, rgba(190,140,255,.12), transparent 70%);
+  --rays: none;
+  --glass: rgba(30, 26, 35, .52);
+  --glass-hi: rgba(255, 255, 255, .045);
+  --card-2: rgba(40, 35, 46, .66);
+  --card-3: rgba(52, 46, 59, .82);
+  --bar: rgba(18, 16, 20, .66);
+  --line: rgba(255, 255, 255, .07);
+  --line-2: rgba(255, 255, 255, .12);
+  --hover: rgba(255, 255, 255, .03);
+  --chip: rgba(255, 255, 255, .05);
+  --ink: #f3eff5;
+  --ink-2: #ada5b4;
+  --ink-3: #736b7b;
+  --brand: #ff6ab0;
+  --brand-2: #ff9acb;
+  --brand-deep: #d8458a;
+  --brand-soft: rgba(255, 106, 176, .13);
+  --brand-grad: linear-gradient(135deg, #ffa3cf 0%, #ff6ab0 55%, #e86fd0 100%);
+  --on-brand: #3b0b22;
+  --geo: #a9b0ff;
+  --geo-soft: rgba(163, 167, 255, .13);
+  --ok: #62d6a0;
+  --warn: #f0c35a;
+  --danger: #ff7d8c;
+  --glow-ok: rgba(255,106,176,.20);
+  --glow-off: rgba(255,255,255,.035);
+  --glow-warn: rgba(240,195,90,.14);
+  --glow-2: rgba(120,200,255,.07);
+  --shadow: 0 18px 40px -22px rgba(0,0,0,.8);
+  --arch-off: linear-gradient(180deg, #2e2933, #1c1920);
+  --arch-hole: #0c0a0e;
+  --arch-hole-shadow: inset 0 8px 16px rgba(0,0,0,.7);
+  --arch-on: linear-gradient(180deg, #ffb0d6 0%, #ff7ab8 50%, #c34a9c 100%);
+  --arch-light: radial-gradient(ellipse 75% 95% at 50% 100%, #fff6fb 0, #ffd0e6 28%, #f0609f 70%, #9a3fa0 100%);
+  --arch-off-label: #736b7b;
+  --knob: #8a8291;
+  --scroll: rgba(255,255,255,.10);
+  --toast: rgba(42, 37, 47, .9);
+  --sel: rgba(255,106,176,.35);
+  color-scheme: dark;
+}
+
+[data-theme="cloud"] {
+  --bg: #ebe9f1;
+  --aura:
+    radial-gradient(55% 42% at 6% 0%, rgba(255,168,112,.55), transparent 70%),
+    radial-gradient(55% 45% at 100% 14%, rgba(255,140,198,.45), transparent 70%),
+    radial-gradient(50% 40% at 50% 46%, rgba(255,255,255,.85), transparent 70%),
+    radial-gradient(55% 40% at 98% 82%, rgba(136,228,236,.48), transparent 70%),
+    radial-gradient(50% 38% at 8% 96%, rgba(255,170,220,.40), transparent 70%),
+    radial-gradient(40% 30% at 60% 104%, rgba(255,214,150,.35), transparent 70%);
+  --rays: none;
+  --glass: rgba(255, 255, 255, .36);
+  --glass-hi: rgba(255, 255, 255, .45);
+  --card-2: rgba(255, 255, 255, .58);
+  --card-3: rgba(255, 255, 255, .92);
+  --bar: rgba(240, 236, 244, .55);
+  --line: rgba(92, 60, 104, .085);
+  --line-2: rgba(92, 60, 104, .15);
+  --hover: rgba(255, 255, 255, .45);
+  --chip: rgba(255, 255, 255, .6);
+  --ink: #2c2233;
+  --ink-2: #6c6074;
+  --ink-3: #9d93a5;
+  --brand: #ee5a9e;
+  --brand-2: #ff8ec2;
+  --brand-deep: #c93f86;
+  --brand-soft: rgba(238, 90, 158, .13);
+  --brand-grad: linear-gradient(135deg, #ffb287 0%, #ff86bf 50%, #8fdde6 100%);
+  --on-brand: #4a102e;
+  --geo: #5d63d8;
+  --geo-soft: rgba(110, 116, 230, .12);
+  --ok: #1d9a68;
+  --warn: #c0840d;
+  --danger: #df4459;
+  --glow-ok: rgba(255,150,205,.40);
+  --glow-off: rgba(255,255,255,.35);
+  --glow-warn: rgba(255,200,90,.35);
+  --glow-2: rgba(130,225,235,.28);
+  --shadow: 0 16px 36px -22px rgba(110,70,120,.45);
+  --arch-off: linear-gradient(180deg, #ffffff, #e4dfea);
+  --arch-hole: #d9d3e1;
+  --arch-hole-shadow: inset 0 8px 14px rgba(90,60,110,.28);
+  --arch-on: linear-gradient(160deg, #ffc49a 0%, #ff90c4 45%, #9fe1ea 100%);
+  --arch-light: radial-gradient(ellipse 75% 95% at 50% 100%, #ffffff 0, #fff0f7 30%, #ffa6cf 68%, #7fcfdc 100%);
+  --arch-off-label: #9d93a5;
+  --knob: #ffffff;
+  --scroll: rgba(92,60,104,.16);
+  --toast: rgba(255, 255, 255, .88);
+  --sel: rgba(255,140,198,.35);
+  color-scheme: light;
+}
+
+[data-theme="sun"] {
+  --bg: #f6eee6;
+  --aura:
+    radial-gradient(60% 48% at 0% 0%, rgba(255,214,128,.65), transparent 70%),
+    radial-gradient(50% 40% at 100% 22%, rgba(255,150,140,.34), transparent 70%),
+    radial-gradient(55% 42% at 90% 96%, rgba(190,160,255,.34), transparent 70%),
+    radial-gradient(45% 36% at 6% 86%, rgba(130,222,226,.30), transparent 70%);
+  --rays: conic-gradient(from 100deg at 0% 0%,
+      transparent 0deg, rgba(255,226,150,.55) 5deg, transparent 10deg,
+      transparent 14deg, rgba(255,170,190,.40) 19deg, transparent 25deg,
+      transparent 30deg, rgba(180,220,255,.40) 34deg, transparent 39deg,
+      transparent 44deg, rgba(255,240,190,.55) 49deg, transparent 55deg,
+      transparent 60deg, rgba(200,170,255,.35) 64deg, transparent 70deg, transparent 360deg);
+  --glass: rgba(255, 252, 247, .38);
+  --glass-hi: rgba(255, 255, 255, .45);
+  --card-2: rgba(255, 252, 247, .62);
+  --card-3: rgba(255, 255, 255, .92);
+  --bar: rgba(248, 240, 232, .55);
+  --line: rgba(110, 70, 40, .09);
+  --line-2: rgba(110, 70, 40, .16);
+  --hover: rgba(255, 255, 255, .45);
+  --chip: rgba(255, 255, 255, .6);
+  --ink: #33241f;
+  --ink-2: #75625a;
+  --ink-3: #a5938a;
+  --brand: #f0607f;
+  --brand-2: #ff9a9f;
+  --brand-deep: #cf4568;
+  --brand-soft: rgba(240, 96, 127, .13);
+  --brand-grad: linear-gradient(135deg, #ffd27a 0%, #ff9a8c 50%, #e58bd0 100%);
+  --on-brand: #4a1620;
+  --geo: #6a5fd8;
+  --geo-soft: rgba(120, 110, 230, .12);
+  --ok: #2a9a5c;
+  --warn: #c37a0c;
+  --danger: #da4452;
+  --glow-ok: rgba(255,205,120,.50);
+  --glow-off: rgba(255,255,255,.35);
+  --glow-warn: rgba(255,190,80,.40);
+  --glow-2: rgba(255,160,190,.25);
+  --shadow: 0 16px 36px -22px rgba(140,90,50,.45);
+  --arch-off: linear-gradient(180deg, #fffdf9, #ece2d8);
+  --arch-hole: #e2d6ca;
+  --arch-hole-shadow: inset 0 8px 14px rgba(120,80,50,.28);
+  --arch-on: linear-gradient(160deg, #ffe08a 0%, #ff9f8a 50%, #d58fe0 100%);
+  --arch-light: radial-gradient(ellipse 75% 95% at 50% 100%, #fffdf3 0, #fff0c2 30%, #ffa98f 68%, #b07ad8 100%);
+  --arch-off-label: #a5938a;
+  --knob: #ffffff;
+  --scroll: rgba(110,70,40,.16);
+  --toast: rgba(255, 252, 247, .9);
+  --sel: rgba(255,170,120,.35);
+  color-scheme: light;
+}
+
+:root {
+  --radius: 18px;
+  --gutter: 28px;
+  --display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --blur: blur(22px) saturate(1.4);
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); transition: background .5s; }
+/* настоящая прозрачность окна: фон страницы становится полупрозрачным,
+   под ним Windows размывает рабочий стол (матовое стекло) */
+[data-theme="night"] { --see: 46%; }
+[data-theme="cloud"], [data-theme="sun"] { --see: 52%; }
+html.glass { background: color-mix(in srgb, var(--bg) var(--see), transparent); }
+html, body { margin: 0; min-height: 100%; }
+body {
+  position: relative;
+  overflow-x: hidden;
+  color: var(--ink);
+  font: 13.5px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum";
+}
+/* фон: мягкие цветные пятна (и лучи в «Луче») под стеклом карточек */
+body::before, body::after {
+  content: ""; position: fixed; inset: -12%; z-index: -1; pointer-events: none;
+}
+body::before { background: var(--aura); animation: drift 38s ease-in-out infinite alternate; }
+body::after {
+  background: var(--rays); inset: 0;
+  -webkit-mask-image: radial-gradient(120% 90% at 0% 0%, #000 0, transparent 75%);
+  mask-image: radial-gradient(120% 90% at 0% 0%, #000 0, transparent 75%);
+  animation: shimmer 9s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(-2.5%, 1.5%) scale(1.04); }
+  100% { transform: translate(2%, -1.5%) scale(1.02); }
+}
+@keyframes shimmer { from { opacity: .75; } to { opacity: 1; } }
+
+button, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--brand-2); outline-offset: 2px; border-radius: 8px; }
+::selection { background: var(--sel); }
+[hidden] { display: none !important; }
+
+/* ---------- шапка ---------- */
+.hero {
+  position: sticky; top: 0; z-index: 3;
+  padding: 22px var(--gutter) 26px;
+  background:
+    radial-gradient(110% 150% at 100% 0%, var(--glow, var(--glow-ok)) 0, transparent 60%),
+    radial-gradient(70% 120% at 0% 100%, var(--glow-2) 0, transparent 70%),
+    var(--bar);
+  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  transition: background .5s;
+}
+body[data-state="off"]  { --glow: var(--glow-off); }
+body[data-state="warn"] { --glow: var(--glow-warn); }
+.hero-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand img { width: 28px; height: 28px; }
+.brand b { font: 600 15px/1 var(--display); letter-spacing: .01em; }
+.pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px 6px 10px; border-radius: 999px;
+  background: var(--chip); border: 1px solid var(--line-2);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  font-size: 12px; color: var(--ink-2); white-space: nowrap;
+}
+.pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); flex: none; }
+body[data-state="ok"] .pill i { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+body[data-state="warn"] .pill i { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); animation: blink 1.4s infinite; }
+body[data-state="ok"] .pill { color: var(--ink); }
+@keyframes blink { 50% { opacity: .35; } }
+
+.hero-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 20px; }
+.hero h1 { margin: 0; font: 600 28px/1.1 var(--display); letter-spacing: -.02em; }
+.hero p { margin: 8px 0 0; color: var(--ink-2); max-width: 36ch; }
+
+/* главный переключатель — арка туннеля, внутри загорается свет */
+.arch {
+  position: relative; flex: none;
+  width: 92px; height: 78px; padding: 0; border: 0; cursor: pointer;
+  border-radius: 46px 46px 16px 16px;
+  background: var(--arch-off);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px var(--line-2), var(--shadow);
+  transition: background .35s, box-shadow .35s, transform .15s;
+}
+.arch::before {
+  content: ""; position: absolute; inset: 10px 14px 0;
+  border-radius: 36px 36px 0 0;
+  background: var(--arch-hole);
+  box-shadow: var(--arch-hole-shadow);
+  transition: background .35s, box-shadow .35s;
+}
+.arch:active { transform: scale(.97); }
+.arch[aria-checked="true"] {
+  background: var(--arch-on);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 0 0 1px color-mix(in srgb, var(--brand-2) 50%, transparent),
+              0 16px 40px -12px color-mix(in srgb, var(--brand) 60%, transparent);
+}
+.arch[aria-checked="true"]::before {
+  background: var(--arch-light);
+  box-shadow: inset 0 6px 14px rgba(120,20,60,.35);
+}
+.arch.warn { background: linear-gradient(180deg, #f6d27d, #c99a2e); box-shadow: 0 0 0 1px rgba(240,195,90,.4), 0 16px 36px -14px rgba(240,195,90,.45); }
+.arch.warn::before { background: radial-gradient(ellipse 75% 95% at 50% 100%, #fff5d6 0, #a47f2a 100%); }
+.arch span {
+  position: absolute; inset: auto 0 7px; z-index: 1;
+  font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--arch-off-label);
+}
+.arch[aria-checked="true"] span { color: #6b1640; }
+.arch.warn span { color: #4a3a10; }
+.arch:hover { filter: brightness(1.06); }
+
+/* ---------- плашка обновления ---------- */
+.upd {
+  margin: 4px var(--gutter) 16px; padding: 13px 13px 13px 17px; border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--brand-soft), transparent), var(--glass);
+  border: 1px solid color-mix(in srgb, var(--brand) 32%, transparent);
+  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+}
+.upd b { color: var(--brand-deep); font-weight: 600; }
+[data-theme="night"] .upd b { color: var(--brand-2); }
+.upd.must { background: linear-gradient(90deg, color-mix(in srgb, var(--warn) 16%, transparent), transparent), var(--glass); border-color: color-mix(in srgb, var(--warn) 38%, transparent); }
+.upd.must b { color: var(--warn); }
+
+/* ---------- вкладки ---------- */
+nav {
+  position: sticky; top: 158px; z-index: 2; padding: 2px var(--gutter) 18px;
+  background: var(--bar);
+  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+}
+.seg {
+  display: flex; gap: 3px; padding: 4px;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 14px;
+}
+.seg button {
+  flex: 1; border: 0; background: none; cursor: pointer;
+  padding: 8px 8px; border-radius: 10px;
+  color: var(--ink-2); font-weight: 500;
+  transition: background .2s, color .2s;
+}
+.seg button:hover { color: var(--ink); }
+.seg button[aria-selected="true"] {
+  background: var(--card-3); color: var(--ink); font-weight: 600;
+  box-shadow: inset 0 1px 0 var(--glass-hi), 0 2px 8px -3px rgba(0,0,0,.35);
+}
+.count {
+  display: inline-block; min-width: 20px; margin-left: 6px; padding: 0 6px;
+  border-radius: 999px; background: var(--chip);
+  font-size: 11px; font-weight: 600; line-height: 18px; color: var(--ink-2);
+}
+.seg button[aria-selected="true"] .count { background: var(--brand-soft); color: var(--brand-deep); }
+[data-theme="night"] .seg button[aria-selected="true"] .count { color: var(--brand-2); }
+
+main { padding: 0 var(--gutter) 34px; }
+
+/* ---------- стеклянные карточки ---------- */
+.card, .block {
+  background: linear-gradient(180deg, var(--glass-hi), transparent 40%), var(--glass);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+}
+.card { overflow: hidden; }
+.row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center; gap: 14px;
+  padding: 14px 16px 14px 18px;
+  border-bottom: 1px solid var(--line);
+  transition: background .15s;
+}
+.row:last-child { border-bottom: 0; }
+.row:hover { background: var(--hover); }
+.row .name { font-weight: 600; letter-spacing: -.005em; }
+.row .sub { color: var(--ink-3); font-size: 12.5px; margin-top: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.off .name { color: var(--ink-2); font-weight: 500; }
+.row details summary { list-style: none; cursor: pointer; }
+.row details summary::-webkit-details-marker { display: none; }
+.row details[open] .sub { white-space: normal; }
+.edit { margin-top: 12px; display: grid; gap: 10px; }
+.edit .actions { display: flex; gap: 12px; align-items: center; }
+
+/* тумблер */
+.sw {
+  position: relative; flex: none; width: 38px; height: 22px; padding: 0; border: 0; cursor: pointer;
+  border-radius: 999px; background: var(--card-2);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  transition: background .25s, box-shadow .25s;
+}
+.sw::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--knob); box-shadow: 0 1px 3px rgba(0,0,0,.18);
+  transition: transform .22s cubic-bezier(.3,.7,.4,1), background .2s;
+}
+.sw[aria-checked="true"] {
+  background: var(--brand-grad);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.18), 0 0 14px -3px color-mix(in srgb, var(--brand) 70%, transparent);
+}
+.sw[aria-checked="true"]::after { background: #fff; transform: translateX(16px); box-shadow: 0 1px 3px rgba(90,10,45,.4); }
+
+/* отметка «европейский выход» */
+.eu {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid transparent; background: transparent; cursor: pointer;
+  border-radius: 999px; padding: 3px 10px; font-size: 11.5px; color: var(--ink-3);
+  transition: .15s;
+}
+.eu::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .6; }
+.eu:hover { border-color: var(--line-2); color: var(--ink-2); }
+.eu[aria-pressed="true"] { border-color: color-mix(in srgb, var(--geo) 40%, transparent); background: var(--geo-soft); color: var(--geo); font-weight: 600; }
+.eu[aria-pressed="true"]::before { opacity: 1; box-shadow: 0 0 6px var(--geo); }
+
+/* поля и кнопки */
+input, textarea {
+  background: var(--card-2); border: 1px solid var(--line-2); border-radius: 12px;
+  transition: border-color .15s, background .15s;
+}
+input:focus, textarea:focus { outline: none; border-color: color-mix(in srgb, var(--brand) 55%, transparent); background: var(--card-3); }
+input::placeholder, textarea::placeholder { color: var(--ink-3); }
+.edit textarea, .block textarea {
+  width: 100%; max-width: 100%; min-height: 64px; padding: 10px 12px; margin-top: 10px;
+  font: 12.5px/1.5 "Cascadia Mono", Consolas, monospace; resize: vertical;
+}
+.edit textarea { margin-top: 0; }
+.add { display: flex; gap: 10px; margin-top: 14px; }
+.add input { flex: 1; min-width: 0; padding: 10px 14px; }
+.btn {
+  border: 1px solid var(--line-2); background: var(--card-2); border-radius: 12px;
+  padding: 9px 16px; cursor: pointer; font-weight: 500; white-space: nowrap;
+  transition: background .15s, border-color .15s, filter .15s;
+}
+.btn:hover { background: var(--card-3); }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn.primary {
+  background: var(--brand-grad); border-color: transparent;
+  color: var(--on-brand); font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 8px 20px -10px color-mix(in srgb, var(--brand) 80%, transparent);
+}
+.btn.primary:hover { filter: brightness(1.05) saturate(1.05); }
+.btn.link { border: 0; background: none; padding: 0; color: var(--danger); font-size: 12.5px; box-shadow: none; }
+.btn.link:hover { text-decoration: underline; background: none; }
+.hint { color: var(--ink-3); font-size: 12.5px; margin: 14px 2px 0; line-height: 1.55; }
+
+/* ---------- настройки ---------- */
+.block { padding: 18px 20px; margin-bottom: 12px; }
+.block h2 { font: 600 14px/1.3 var(--display); margin: 0 0 4px; }
+.block.line, .block .line { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.block .hint { margin-top: 2px; }
+.block label { display: block; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.code {
+  font: 12.5px "Cascadia Mono", Consolas, monospace; color: var(--brand-deep);
+  background: var(--card-2); border: 1px solid var(--line-2); border-radius: 10px;
+  padding: 7px 12px; display: inline-block; margin-top: 12px; user-select: all;
+}
+[data-theme="night"] .code { color: var(--brand-2); }
+.verdict { margin: 10px 0 6px; color: var(--ink-2); font-size: 13px; }
+.verdict.good b { color: var(--ok); }
+.verdict.bad { color: var(--warn); }
+.srv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; padding: 11px 0; border-top: 1px solid var(--line); }
+.srv .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srv .meta { color: var(--ink-3); font-size: 12.5px; text-align: right; white-space: nowrap; }
+.srv .svc { grid-column: 1 / -1; display: flex; gap: 5px; flex-wrap: wrap; }
+.srv.dead .nm { color: var(--ink-3); font-weight: 400; }
+.tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--ink-2); }
+.tag.yes { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 32%, transparent); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+.tag.no { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 32%, transparent); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.tag.eu { color: var(--geo); border-color: color-mix(in srgb, var(--geo) 40%, transparent); background: var(--geo-soft); }
+.checks { margin: 10px 0 0; padding: 0; list-style: none; }
+.checks li { padding: 8px 0; display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); }
+.checks .ok { color: var(--ok); font-weight: 600; }
+.checks .bad { color: var(--danger); font-weight: 600; }
+#ver { color: var(--ink-3); font-weight: 500; margin-left: 4px; }
+.log { margin-top: 10px; max-height: 200px; overflow: auto; font: 12px/1.6 "Cascadia Mono", Consolas, monospace; color: var(--ink-2); }
+.log div { padding: 2px 0; }
+.log time { color: var(--ink-3); margin-right: 10px; }
+
+/* выбор темы */
+.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.theme {
+  display: grid; gap: 8px; justify-items: center; padding: 8px 8px 10px; cursor: pointer;
+  border: 1px solid var(--line-2); border-radius: 14px; background: var(--card-2);
+  font-size: 12.5px; font-weight: 500; color: var(--ink-2);
+  transition: border-color .2s, background .2s, transform .15s;
+}
+.theme:hover { background: var(--card-3); }
+.theme:active { transform: scale(.98); }
+.theme[aria-pressed="true"] {
+  color: var(--ink); font-weight: 600;
+  border-color: color-mix(in srgb, var(--brand) 60%, transparent);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.theme i { display: block; width: 100%; height: 52px; border-radius: 10px; border: 1px solid rgba(0,0,0,.06); }
+.theme .p-night {
+  background:
+    radial-gradient(70% 90% at 100% 0%, rgba(255,106,176,.6), transparent 70%),
+    radial-gradient(60% 80% at 0% 70%, rgba(108,226,186,.28), transparent 70%),
+    radial-gradient(60% 80% at 90% 100%, rgba(112,170,255,.35), transparent 70%), #121014;
+}
+.theme .p-cloud {
+  background:
+    radial-gradient(70% 90% at 0% 0%, rgba(255,168,112,.85), transparent 70%),
+    radial-gradient(70% 90% at 100% 20%, rgba(255,140,198,.75), transparent 70%),
+    radial-gradient(70% 90% at 90% 100%, rgba(136,228,236,.8), transparent 70%), #f1eff5;
+}
+.theme .p-sun {
+  background:
+    conic-gradient(from 100deg at 0% 0%, transparent 0deg, rgba(255,226,150,.9) 6deg, transparent 12deg,
+      rgba(255,170,190,.6) 20deg, transparent 28deg, rgba(180,220,255,.6) 36deg, transparent 44deg,
+      rgba(200,170,255,.5) 54deg, transparent 64deg),
+    radial-gradient(80% 100% at 0% 0%, rgba(255,214,128,.9), transparent 70%), #f6eee6;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 6px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--scroll) 100%, var(--ink) 10%); }
+::-webkit-scrollbar-track { background: transparent; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 22px; z-index: 9; transform: translate(-50%, 24px); opacity: 0;
+  background: var(--toast); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border: 1px solid var(--line-2); box-shadow: var(--shadow);
+  padding: 10px 18px; border-radius: 999px; font-size: 12.5px; white-space: nowrap;
+  transition: .22s cubic-bezier(.3,.7,.4,1); pointer-events: none;
+}
+.toast.show { transform: translate(-50%, 0); opacity: 1; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+<script>
+  // тема ставится до отрисовки, чтобы окно не мигало чужими цветами
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem('svpn-theme') || 'night';
+    document.documentElement.classList.toggle('glass', localStorage.getItem('svpn-glass') === '1');
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-top">
+    <div class="brand"><img src="/favicon.png" alt=""><b>Svpn</b></div>
+    <span class="pill"><i></i><span id="pill">…</span></span>
+  </div>
+  <div class="hero-main">
+    <div>
+      <h1 id="title">Svpn</h1>
+      <p id="subtitle">Подключаюсь…</p>
+    </div>
+    <button class="arch" id="main" role="switch" aria-checked="false" aria-label="Включить тоннель"><span id="mainLabel"></span></button>
+  </div>
+</header>
+
+<div class="upd" id="upd" hidden>
+  <div><b id="updTitle"></b><div id="updNotes" class="hint" style="margin:2px 0 0"></div></div>
+  <button class="btn primary" id="updBtn">Обновить</button>
+</div>
+
+<nav><div class="seg" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="sites">Сайты<span class="count" id="cSites"></span></button>
+  <button role="tab" aria-selected="false" data-tab="apps">Программы<span class="count" id="cApps"></span></button>
+  <button role="tab" aria-selected="false" data-tab="settings">Настройки</button>
+</div></nav>
+
+<main>
+  <section id="sites">
+    <div id="siteList" class="card"></div>
+    <form class="add" id="addSite">
+      <input id="newSite" placeholder="Адрес сайта, например kling.ai" aria-label="Адрес нового сайта">
+      <button class="btn primary">Добавить</button>
+    </form>
+    <p class="hint">«Европа» — для сервисов, которые проверяют страну: они пойдут только через европейские узлы.</p>
+  </section>
+
+  <section id="apps" hidden>
+    <div id="appList" class="card"></div>
+    <form class="add" id="addApp">
+      <input id="newApp" placeholder="Файл программы, например Discord.exe" aria-label="Файл новой программы">
+      <button class="btn primary">Добавить</button>
+    </form>
+    <p class="hint">Программа целиком пойдёт через VPN. Имя файла видно в Диспетчере задач на вкладке «Подробности». Для конкретной копии укажи полный путь к .exe.</p>
+  </section>
+
+  <section id="settings" hidden>
+    <div class="block">
+      <h2>Оформление</h2>
+      <div class="hint">Как будет выглядеть окно Svpn</div>
+      <div class="themes">
+        <button class="theme" data-theme-pick="night" aria-pressed="false"><i class="p-night"></i>Ночь</button>
+        <button class="theme" data-theme-pick="cloud" aria-pressed="false"><i class="p-cloud"></i>Облачко</button>
+        <button class="theme" data-theme-pick="sun" aria-pressed="false"><i class="p-sun"></i>Луч</button>
+      </div>
+      <div class="line" id="glassLine" hidden style="margin-top:16px">
+        <div><h2>Прозрачное окно</h2><div class="hint">Сквозь окно мягко просвечивает рабочий стол</div></div>
+        <button class="sw" id="glass" role="switch" aria-checked="false" aria-label="Прозрачное окно"></button>
+      </div>
+    </div>
+
+    <div class="block line">
+      <div><h2>Запускать вместе с Windows</h2><div class="hint">Svpn поднимется сам после включения компьютера</div></div>
+      <button class="sw" id="autostart" role="switch" aria-checked="false" aria-label="Автозапуск"></button>
+    </div>
+
+    <div class="block">
+      <h2>Подписка VPN</h2>
+      <div class="hint">Ссылка от провайдера или ключ сервера (vless://, vmess://, trojan://, ss://, hy2://). Несколько — по одной в строке.</div>
+      <textarea id="subMain" spellcheck="false" placeholder="https://…" aria-label="Подписки"></textarea>
+      <div class="add"><button class="btn primary" id="saveSubs">Сохранить и проверить</button></div>
+    </div>
+
+    <div class="block">
+      <div class="line"><h2>Серверы</h2><button class="btn" id="checkNodes">Проверить серверы</button></div>
+      <p class="verdict" id="verdict"></p>
+      <div id="servers"></div>
+    </div>
+
+    <div class="block">
+      <div class="line">
+        <div><h2>Айпад через этот компьютер</h2><div class="hint">Дома, без Tailscale. В айпаде: Wi-Fi → сеть → Прокси → Авто</div></div>
+        <button class="sw" id="ipad" role="switch" aria-checked="false" aria-label="Айпад"></button>
+      </div>
+      <div class="code" id="pacUrl"></div>
+    </div>
+
+    <div class="block">
+      <div class="line"><h2>Проверка связи</h2><button class="btn" id="check">Проверить</button></div>
+      <ul class="checks" id="checks"></ul>
+    </div>
+
+    <div class="block line">
+      <div><h2>Версия <span id="ver"></span></h2><div class="hint">Обновления приходят сами — Svpn проверяет их при запуске и раз в 6 часов</div></div>
+      <button class="btn" id="checkUpd">Проверить</button>
+    </div>
+
+    <div class="block">
+      <h2>Журнал</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const T = new URLSearchParams(location.search).get('t') || '';
+const $ = id => document.getElementById(id);
+let S = null;
+
+async function api(path, body) {
+  const r = await fetch('/api/' + path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: {'X-Token': T, 'Content-Type': 'application/json'},
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+  return r.json();
+}
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function plural(n, a, b, c) { n = Math.abs(n) % 100; const m = n % 10;
+  return n > 10 && n < 20 ? c : m > 1 && m < 5 ? b : m === 1 ? a : c; }
+
+function renderHero(st) {
+  const on = st.settings.enabled;
+  const m = $('main');
+  m.setAttribute('aria-checked', on);
+  m.classList.toggle('warn', on && st.health !== 'ok');
+  $('mainLabel').textContent = on ? 'вкл' : 'выкл';
+  m.setAttribute('aria-label', on ? 'Выключить тоннель' : 'Включить тоннель');
+  const state = !on ? 'off' : st.health === 'ok' ? 'ok' : 'warn';
+  document.body.dataset.state = state;
+  $('pill').textContent = state === 'off' ? 'Напрямую'
+    : state === 'ok' ? (st.exit ? 'Выход · ' + st.exit : 'В сети')
+    : st.health === 'starting' ? 'Подключаюсь' : 'Ищу сервер';
+  const sites = st.settings.sites.filter(s => s.on).length;
+  const apps = st.settings.apps.filter(a => a.on).length;
+  const nosub = !(st.servers || []).length;
+  if (on && nosub) {
+    $('pill').textContent = 'Нет подписки';
+    $('title').textContent = 'Нужна подписка';
+    $('subtitle').textContent = 'Вставь ссылку на подписку VPN в Настройках — без неё Svpn не знает, куда подключаться.';
+  } else if (!on) {
+    $('title').textContent = 'Svpn выключен';
+    $('subtitle').textContent = 'Весь трафик идёт напрямую, как без VPN.';
+  } else if (st.health === 'ok') {
+    $('title').textContent = 'Svpn работает';
+    $('subtitle').innerHTML = `${sites} ${plural(sites,'сайт','сайта','сайтов')} и ${apps} ${plural(apps,'программа','программы','программ')} идут через VPN, остальное — напрямую.`;
+  } else if (st.health === 'starting') {
+    $('title').textContent = 'Svpn запускается';
+    $('subtitle').textContent = 'Подключаюсь к серверам, это до минуты.';
+  } else {
+    $('title').textContent = 'Нет связи с VPN';
+    $('subtitle').textContent = st.problem || 'Пробую другие серверы. Пока всё идёт напрямую.';
+  }
+  $('cSites').textContent = sites;
+  $('cApps').textContent = apps;
+}
+
+function renderServers(st) {
+  const sv = st.servers || [];
+  const checked = sv.filter(x => x.checked);
+  const alive = checked.filter(x => x.alive);
+  const eu = checked.filter(x => x.strict_ok);
+  const v = $('verdict');
+  $('checkNodes').disabled = st.checking;
+  $('checkNodes').textContent = st.checking ? 'Проверяю…' : 'Проверить серверы';
+  if (!sv.length) { v.className = 'verdict bad'; v.textContent = 'Серверов пока нет — добавь подписку выше.'; }
+  else if (st.checking) { v.className = 'verdict'; v.textContent = `Проверяю ${sv.length} ${plural(sv.length,'сервер','сервера','серверов')}, это около минуты.`; }
+  else if (!checked.length) { v.className = 'verdict'; v.textContent = 'Серверы ещё не проверялись.'; }
+  else if (!eu.length) { v.className = 'verdict bad';
+    v.textContent = `Работает ${alive.length} из ${sv.length}, но ни один не подходит для сайтов с отметкой «Европа» (Gemini, Claude, OpenRouter). Попроси у провайдера сервер в Европе, например в Нидерландах.`; }
+  else { v.className = 'verdict good';
+    v.innerHTML = `Работает <b>${alive.length}</b> из ${sv.length}. Для сайтов с отметкой «Европа» подходят <b>${eu.length}</b> — Svpn сам ведёт их туда.`; }
+  const names = Object.fromEntries((st.services || []).map(x => [x.id, x.name]));
+  $('servers').innerHTML = sv.map(x => {
+    if (!x.checked) return `<div class="srv"><div class="nm">${esc(x.name)}</div><div class="meta">не проверен</div></div>`;
+    if (!x.alive) return `<div class="srv dead"><div class="nm">${esc(x.name)}</div><div class="meta">не отвечает</div></div>`;
+    const tags = Object.entries(x.services || {}).map(([k, ok]) =>
+      `<span class="tag ${ok ? 'yes' : 'no'}">${esc(names[k] || k)} ${ok ? '✓' : '✗'}</span>`).join('');
+    return `<div class="srv"><div class="nm">${esc(x.name)}</div>
+      <div class="meta">${esc(x.country || '?')}${x.ping ? ', ' + x.ping + ' мс' : ''}</div>
+      <div class="svc">${x.strict_ok ? '<span class="tag eu">Европа</span>' : ''}${tags}</div></div>`;
+  }).join('');
+}
+
+function siteRow(s, i) {
+  return `<div class="row ${s.on ? '' : 'off'}">
+    <details><summary><div class="name">${esc(s.name)}</div>
+      <div class="sub">${esc(s.note || s.domains.join(', '))}</div></summary>
+      <div class="edit"><textarea data-i="${i}" aria-label="Адреса сайта ${esc(s.name)}">${esc(s.domains.join('\n'))}</textarea>
+      <div class="actions"><button class="btn" data-save-site="${i}">Сохранить адреса</button>
+      <button class="btn link" data-del-site="${i}">Удалить из списка</button></div></div>
+    </details>
+    <button class="eu" data-geo="${i}" aria-pressed="${!!s.geo}" title="Только через европейские узлы">Европа</button>
+    <button class="sw" data-site="${i}" role="switch" aria-checked="${!!s.on}" aria-label="${esc(s.name)}"></button>
+  </div>`;
+}
+function appRow(a, i) {
+  const files = a.exe.concat(a.paths);
+  return `<div class="row ${a.on ? '' : 'off'}" style="grid-template-columns:1fr auto">
+    <details><summary><div class="name">${esc(a.name)}</div>
+      <div class="sub">${esc(a.note || files.join(', '))}</div></summary>
+      <div class="edit"><textarea data-ai="${i}" aria-label="Файлы программы ${esc(a.name)}">${esc(files.join('\n'))}</textarea>
+      <div class="actions"><button class="btn" data-save-app="${i}">Сохранить файлы</button>
+      <button class="btn link" data-del-app="${i}">Удалить из списка</button></div></div>
+    </details>
+    <button class="sw" data-app="${i}" role="switch" aria-checked="${!!a.on}" aria-label="${esc(a.name)}"></button>
+  </div>`;
+}
+
+function render(st) {
+  S = st;
+  setTheme(st.settings.theme || 'night');
+  const glass = !!st.glass_ok && st.settings.glass !== false;
+  document.documentElement.classList.toggle('glass', glass);
+  try { localStorage.setItem('svpn-glass', glass ? '1' : '0'); } catch (e) {}
+  $('glassLine').hidden = !st.glass_ok;
+  $('glass').setAttribute('aria-checked', st.settings.glass !== false);
+  renderHero(st);
+  // первый запуск без подписки — сразу открываем Настройки на поле подписки
+  if (!(st.servers || []).length && !(st.settings.subscriptions.main.length || st.settings.subscriptions.geo.length) && !window._welcomed) {
+    window._welcomed = true;
+    const tb = document.querySelector('[data-tab="settings"]');
+    if (tb) { tb.click(); setTimeout(() => { const sm = $('subMain'); sm.scrollIntoView({block: 'center'}); sm.focus(); }, 150); }
+  }
+  // недописанные адреса/файлы не трогаем: пока что-то правится, списки не перерисовываем
+  const editing = [...document.querySelectorAll('details textarea')].some(t => t.value !== t.defaultValue)
+    || ['siteList', 'appList'].some(id => $(id).contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA');
+  if (!editing) {
+    const keepOpen = [...document.querySelectorAll('details[open] textarea')].map(t => t.dataset.i ?? 'a' + t.dataset.ai);
+    $('siteList').innerHTML = st.settings.sites.map(siteRow).join('');
+    $('appList').innerHTML = st.settings.apps.map(appRow).join('');
+    document.querySelectorAll('details textarea').forEach(t => {
+      if (keepOpen.includes(t.dataset.i ?? 'a' + t.dataset.ai)) t.closest('details').open = true; });
+  }
+  $('autostart').setAttribute('aria-checked', !!st.autostart);
+  $('ipad').setAttribute('aria-checked', !!st.settings.ipad);
+  $('pacUrl').textContent = st.pac_url || '';
+  $('pacUrl').hidden = !st.settings.ipad || !st.pac_url;
+  const subs = st.settings.subscriptions.main.concat(st.settings.subscriptions.geo).join('\n');
+  const sm = $('subMain');
+  if (document.activeElement !== sm && (sm.dataset.shown === undefined || sm.value === sm.dataset.shown)) {
+    sm.value = subs; sm.dataset.shown = subs;
+  }
+  renderServers(st);
+  $('ver').textContent = st.version || '';
+  const u = st.update, up = $('upd');
+  up.hidden = !u && !st.update_status;
+  if (u || st.update_status) {
+    up.classList.toggle('must', !!(u && u.mandatory));
+    $('updTitle').textContent = st.update_status || (u.mandatory
+      ? `Нужно обновиться до версии ${u.version}` : `Вышла версия ${u.version}`);
+    $('updNotes').textContent = st.update_status ? '' : (u.notes || '');
+    $('updBtn').hidden = !!st.update_status && !(u && st.update_status.startsWith('Обновление не встало'));
+  }
+  stick();
+  $('log').innerHTML = (st.log || []).slice().reverse().map(l => `<div><time>${esc(l[0])}</time>${esc(l[1])}</div>`).join('');
+}
+
+function setTheme(name) {
+  document.documentElement.dataset.theme = name;
+  try { localStorage.setItem('svpn-theme', name); } catch (e) {}
+  document.querySelectorAll('[data-theme-pick]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themePick === name));
+}
+
+async function refresh() { try { render(await api('state')); } catch (e) { $('subtitle').textContent = 'Нет связи с приложением: ' + e.message; } }
+async function act(path, body, msg) {
+  try { render(await api(path, body)); if (msg) toast(msg); }
+  catch (e) { toast(e.message); }
+}
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.setAttribute('aria-selected', x === b));
+  document.querySelectorAll('main section').forEach(s => s.hidden = s.id !== b.dataset.tab);
+});
+$('main').onclick = () => act('enabled', {on: !S.settings.enabled}, S.settings.enabled ? 'Svpn выключен' : 'Svpn включён');
+$('autostart').onclick = () => act('autostart', {on: $('autostart').getAttribute('aria-checked') !== 'true'});
+$('glass').onclick = () => act('glass', {on: S.settings.glass === false});
+$('ipad').onclick = () => act('ipad', {on: !S.settings.ipad});
+
+document.addEventListener('click', e => {
+  const d = e.target.dataset;
+  const pick = e.target.closest('[data-theme-pick]');
+  if (pick) { setTheme(pick.dataset.themePick); act('theme', {name: pick.dataset.themePick}); }
+  else if (d.site !== undefined) act('site', {i: +d.site, on: !S.settings.sites[d.site].on});
+  else if (d.geo !== undefined) act('site', {i: +d.geo, geo: !S.settings.sites[d.geo].geo});
+  else if (d.app !== undefined) act('app', {i: +d.app, on: !S.settings.apps[d.app].on});
+  else if (d.saveSite !== undefined) act('site', {i: +d.saveSite, domains: document.querySelector(`textarea[data-i="${d.saveSite}"]`).value.split(/[\s,]+/)}, 'Адреса сохранены');
+  else if (d.saveApp !== undefined) act('app', {i: +d.saveApp, files: document.querySelector(`textarea[data-ai="${d.saveApp}"]`).value.split(/\n+/)}, 'Файлы сохранены');
+  else if (d.delSite !== undefined) act('site', {i: +d.delSite, remove: true}, 'Удалено');
+  else if (d.delApp !== undefined) act('app', {i: +d.delApp, remove: true}, 'Удалено');
+});
+$('addSite').onsubmit = e => { e.preventDefault(); const v = $('newSite').value.trim(); if (!v) return;
+  act('site', {add: v}, 'Сайт добавлен').then(() => $('newSite').value = ''); };
+$('addApp').onsubmit = e => { e.preventDefault(); const v = $('newApp').value.trim(); if (!v) return;
+  act('app', {add: v}, 'Программа добавлена').then(() => $('newApp').value = ''); };
+$('saveSubs').onclick = () => (delete $('subMain').dataset.shown, act('subs', {main: $('subMain').value.split(/\s+/).filter(Boolean), geo: []},
+  'Подписка сохранена. Через минуту проверю серверы'));
+$('updBtn').onclick = () => act('update', {}, 'Скачиваю обновление');
+$('checkUpd').onclick = () => act('check_update', {}).then(() => { if (!S.update) toast('Стоит последняя версия'); });
+$('checkNodes').onclick = () => act('check_nodes', {}, 'Проверяю серверы');
+$('check').onclick = async () => {
+  $('checks').innerHTML = '<li>Проверяю…</li>';
+  try {
+    const r = await api('check', {});
+    $('checks').innerHTML = r.map(c => `<li><span>${esc(c.name)}</span><span class="${c.ok ? 'ok' : 'bad'}">${esc(c.result)}</span></li>`).join('');
+  } catch (e) { $('checks').innerHTML = `<li class="bad">${esc(e.message)}</li>`; }
+};
+
+function stick() { document.querySelector('nav').style.top = document.querySelector('.hero').offsetHeight + 'px'; }
+addEventListener('resize', stick);
+refresh().then(stick); setInterval(refresh, 4000);
+</script>
+</body>
+</html>

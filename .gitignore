@@ -1,0 +1,6 @@
+seed/
+*.bak*
+__pycache__/
+*.pyc
+settings.json
+subs/
