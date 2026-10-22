@@ -54,7 +54,7 @@ XRAY_EXE = os.path.join(BIN, "xray.exe")
 SB_EXE = os.path.join(BIN, "sing-box.exe")
 
 TASK = "Svpn Interceptor"
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -171,6 +171,35 @@ def clear_old_pac():
                 log("убрала старые системные правила (PAC) — их заменил перехватчик")
     except OSError:
         pass
+
+
+# Браузеры со своим «безопасным DNS»: если там стоит сторонний сервер (например,
+# xbox-dns.ru), он может отвечать «такого сайта нет» — и Svpn до сайта даже не дойдёт.
+BROWSERS = {"Хроме": r"Google\Chrome\User Data", "Edge": r"Microsoft\Edge\User Data",
+            "Яндекс Браузере": r"Yandex\YandexBrowser\User Data"}
+GOOD_DOH = ("dns.google", "cloudflare-dns.com", "chrome.cloudflare-dns.com",
+            "dns.quad9.net", "dns10.quad9.net", "doh.opendns.com", "dns.nextdns.io")
+
+
+def browser_dns_warnings():
+    """Список вида [("Хроме", "xbox-dns.ru")] — где включён сторонний DNS."""
+    from urllib.parse import urlparse
+    out = []
+    base = os.environ.get("LOCALAPPDATA") or ""
+    for name, rel in BROWSERS.items():
+        try:
+            with open(os.path.join(base, rel, "Local State"), encoding="utf-8") as f:
+                doh = json.load(f).get("dns_over_https") or {}
+        except (OSError, ValueError):
+            continue
+        if doh.get("mode") != "secure":
+            continue
+        for tpl in (doh.get("templates") or "").split():
+            host = (urlparse(tpl).hostname or "").lower()
+            if host and not any(host == g or host.endswith("." + g) for g in GOOD_DOH):
+                out.append((name, host))
+                break
+    return out
 
 
 def listening_pids(ports):
@@ -631,6 +660,10 @@ class Svpn:
                     res.append({"name": name, "ok": False, "result": f"ошибка {e.code}"})
             except Exception as e:
                 res.append({"name": name, "ok": False, "result": "нет связи"})
+        warn = browser_dns_warnings()
+        res.append({"name": "DNS в браузерах", "ok": not warn,
+                    "result": "; ".join(f"в {b} свой DNS {h} — выключи «Безопасный DNS»"
+                                        for b, h in warn) if warn else "обычный"})
         res.append({"name": "Перехватчик программ и сайтов",
                     "ok": process_running("sing-box.exe"),
                     "result": "работает" if process_running("sing-box.exe") else "не запущен"})
@@ -1371,6 +1404,13 @@ def main_app():
         except Exception:
             pass
     t.updater.notify = notify
+
+    def dns_hint():
+        for b, h in browser_dns_warnings():
+            log(f"в {b} включён сторонний DNS ({h}) — он может говорить, что сайтов нет")
+            notify(f"В {b} включён сторонний DNS ({h}). Из-за него сайты могут не открываться — "
+                   "выключи в настройках браузера «Использовать безопасный DNS».")
+    threading.Timer(8, dns_hint).start()
 
     # Окну нужен главный поток, поэтому трей живёт в своём (на Windows так можно).
     if ui["win"]:

@@ -1,11 +1,11 @@
 {
- "version": "1.1.0",
- "notes": "Установщик для команды; если подписки нет — окно само открывает Настройки",
+ "version": "1.1.1",
+ "notes": "Проверка связи теперь замечает сторонний DNS в браузере (например xbox-dns.ru), из-за которого сайты могут «не существовать»",
  "mandatory": false,
  "files": [
   {
    "path": "app.py",
-   "sha256": "2cbb1141519d7fae62933ea18f9c1185e6331a7f3ddd62a2f1935338c47c6328",
+   "sha256": "7e857e7bf642d9a512e0463fa4ecf3aa0da28d8b1111559f3116ce0ee510f1f5",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
   },
   {
