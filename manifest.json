@@ -1,11 +1,11 @@
 {
- "version": "1.1.1",
- "notes": "Проверка связи теперь замечает сторонний DNS в браузере (например xbox-dns.ru), из-за которого сайты могут «не существовать»",
+ "version": "1.1.2",
+ "notes": "Исправлено: после включения компьютера перехватчик мог «проснуться» раньше Svpn, и YouTube, Фотошоп и другие программы из списка висели. Windows один раз спросит разрешение — нажми «Да».",
  "mandatory": false,
  "files": [
   {
    "path": "app.py",
-   "sha256": "7e857e7bf642d9a512e0463fa4ecf3aa0da28d8b1111559f3116ce0ee510f1f5",
+   "sha256": "997f7fa7c1dbd9f03234f6cf2dd41477fca97f1ddf356f3ad2d7f6856df2d94b",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
   },
   {

@@ -54,7 +54,10 @@ XRAY_EXE = os.path.join(BIN, "xray.exe")
 SB_EXE = os.path.join(BIN, "sing-box.exe")
 
 TASK = "Svpn Interceptor"
-VERSION = "1.1.1"
+# При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
+# (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
+CLEANUP_TASK = "Svpn Cleanup"
+VERSION = "1.1.2"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -221,8 +224,8 @@ def process_running(image):
     return image.lower() in out.lower()
 
 
-def task_exists():
-    code, _ = run(["schtasks", "/Query", "/TN", TASK], 20)
+def task_exists(name=TASK):
+    code, _ = run(["schtasks", "/Query", "/TN", name], 20)
     return code == 0
 
 
@@ -266,7 +269,7 @@ SETUP_MARK = os.path.join(DATA, "setup.json")
 
 def setup_ok():
     """Задача перехватчика есть и смотрит на sing-box из этой папки Svpn."""
-    if not task_exists():
+    if not task_exists() or not task_exists(CLEANUP_TASK):
         return False
     try:
         with open(SETUP_MARK, encoding="utf-8") as f:
@@ -301,6 +304,7 @@ def uninstall_admin():
 $ErrorActionPreference = 'SilentlyContinue'
 Stop-ScheduledTask -TaskName '{TASK}'
 Unregister-ScheduledTask -TaskName '{TASK}' -Confirm:$false
+Unregister-ScheduledTask -TaskName '{CLEANUP_TASK}' -Confirm:$false
 Get-NetFirewallRule -DisplayName 'Svpn iPad*' | Remove-NetFirewallRule
 'ok'
 """
@@ -319,6 +323,11 @@ $a = New-ScheduledTaskAction -Execute '{SB_EXE}' -Argument 'run -c "{SB_CFG}" -D
 $p = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable
 Register-ScheduledTask -TaskName '{TASK}' -Action $a -Principal $p -Settings $s -Force | Out-Null
+# уборка: при включении и входе в Windows гасим перехватчик, оставшийся от прошлого сеанса
+$a2 = New-ScheduledTaskAction -Execute 'schtasks.exe' -Argument '/End /TN "{TASK}"'
+$tr = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -AtLogOn))
+$s2 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName '{CLEANUP_TASK}' -Action $a2 -Trigger $tr -Principal $p -Settings $s2 -Force | Out-Null
 # обычному пользователю — право запускать и останавливать эту задачу
 $svc = New-Object -ComObject 'Schedule.Service'; $svc.Connect()
 $t = $svc.GetFolder('\\').GetTask('{TASK}')
