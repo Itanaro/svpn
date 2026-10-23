@@ -57,7 +57,7 @@ TASK = "Svpn Interceptor"
 # При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
 # (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
 CLEANUP_TASK = "Svpn Cleanup"
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -959,6 +959,8 @@ def make_ui_handler(t):
             name = self.path.split("?")[0][5:]
             try:
                 if name == "show":
+                    if getattr(t, "shutting_down", False):
+                        return self.send(409, {"error": "Svpn закрывается"})
                     t.show_window()
                     return self.send(200, {"ok": True})
                 if name == "state":
@@ -1215,6 +1217,9 @@ class Window:
                         self.on_shutdown()
                     except Exception:
                         pass
+                    # Выходим совсем. Если Windows передумает выключаться (её отменили или
+                    # компьютер ушёл в сон), полуживой Svpn не должен остаться висеть.
+                    threading.Timer(2.0, lambda: os._exit(0)).start()
             window.native.FormClosing += closing   # срабатывает после крестика pywebview
         except Exception as e:
             log(f"окно: не получилось следить за выключением Windows ({e})")
@@ -1268,14 +1273,16 @@ class Window:
 
 
 def ask_running_to_show():
-    """Svpn уже запущен — просим его показать окно (второе окно не плодим)."""
+    """Svpn уже запущен — просим его показать окно (второе окно не плодим).
+    False — если прежний Svpn не отвечает (завис или закрывается)."""
     try:
         tok = open(os.path.join(DATA, ".token"), encoding="utf-8").read().strip()
         req = urllib.request.Request(f"http://127.0.0.1:{E.UI_PORT}/api/show", data=b"{}",
                                      headers={"X-Token": tok, "Content-Type": "application/json"})
         urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=5).read()
+        return True
     except Exception:
-        pass
+        return False
 
 
 # ---------------------------------------------------------------- трей
@@ -1299,8 +1306,14 @@ def main_app():
     try:
         with socket.create_connection(("127.0.0.1", E.UI_PORT), timeout=1):
             pass
-        ask_running_to_show()
-        return
+        if ask_running_to_show():
+            return
+        # Прежний Svpn завис (например, Windows начала выключаться и передумала) —
+        # закрываем его и запускаемся заново, иначе Svpn так и не поднимется.
+        log("прежний Svpn не отвечает — закрываю его и запускаюсь заново")
+        for pid in listening_pids({E.UI_PORT}) - {os.getpid()}:
+            run(["taskkill", "/F", "/PID", str(pid)], 20)
+        time.sleep(1.5)
     except OSError:
         pass
 
@@ -1360,6 +1373,7 @@ def main_app():
         t.glass_ok = ui["win"].glass_ok
 
         def on_shutdown():
+            t.shutting_down = True
             log("Windows выключается — останавливаю Svpn")
             t.interceptor(False)
             t.stop_xray()
