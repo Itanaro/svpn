@@ -57,7 +57,7 @@ TASK = "Svpn Interceptor"
 # При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
 # (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
 CLEANUP_TASK = "Svpn Cleanup"
-VERSION = "1.1.4"
+VERSION = "1.1.5"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -265,28 +265,33 @@ def run_elevated(args):
 
 
 SETUP_MARK = os.path.join(DATA, "setup.json")
+# Номер набора настроек, которые делает --setup. Поднимаем, только когда setup()
+# начинает делать что-то новое, — тогда Windows спросит разрешение один раз.
+SETUP_LEVEL = 2
 
 
 def setup_ok():
-    """Задача перехватчика есть и смотрит на sing-box из этой папки Svpn."""
-    if not task_exists() or not task_exists(CLEANUP_TASK):
+    """Задача перехватчика есть и смотрит на sing-box из этой папки Svpn.
+
+    Задачу уборки здесь не проверяем: она работает от имени системы, и обычному
+    пользователю Windows её просто не показывает — из-за этого раньше Svpn при
+    каждом запуске думал, что настройки нет, и снова просил права администратора.
+    """
+    if not task_exists():
         return False
     try:
         with open(SETUP_MARK, encoding="utf-8") as f:
-            return json.load(f).get("sb", "").lower() == SB_EXE.lower()
-    except (OSError, ValueError):
-        pass
-    code, out = run(["schtasks", "/Query", "/TN", TASK, "/XML"], 20)
-    if code == 0 and SB_EXE.lower() in out.lower():
-        mark_setup()
-        return True
-    return False
+            m = json.load(f)
+        return (m.get("sb", "").lower() == SB_EXE.lower()
+                and int(m.get("level", 1)) >= SETUP_LEVEL)
+    except (OSError, ValueError, TypeError):
+        return False
 
 
 def mark_setup():
     try:
         with open(SETUP_MARK, "w", encoding="utf-8") as f:
-            json.dump({"sb": SB_EXE, "at": time.time()}, f)
+            json.dump({"sb": SB_EXE, "level": SETUP_LEVEL, "at": time.time()}, f)
     except OSError:
         pass
 
@@ -332,11 +337,16 @@ Register-ScheduledTask -TaskName '{CLEANUP_TASK}' -Action $a2 -Trigger $tr -Prin
 $svc = New-Object -ComObject 'Schedule.Service'; $svc.Connect()
 $t = $svc.GetFolder('\\').GetTask('{TASK}')
 $t.SetSecurityDescriptor('D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GRGX;;;AU)', 0)
+$t2 = $svc.GetFolder('\\').GetTask('{CLEANUP_TASK}')
+$t2.SetSecurityDescriptor('D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GR;;;AU)', 0)
 # айпад: вход в туннель и раздача правил — только домашняя сеть и Tailscale
 Get-NetFirewallRule -DisplayName 'Svpn iPad*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -DisplayName 'Svpn iPad (10880-10881)' -Direction Inbound -Protocol TCP -LocalPort 10880,10881 -RemoteAddress LocalSubnet,100.64.0.0/10 -Action Allow -Profile Any | Out-Null
+# Xray: убираем старые правила (в т.ч. «Блокировать», если когда-то нажали «Отмена»)
+# и ставим своё — тогда окно «Разрешить доступ» от брандмауэра больше не появляется.
 $prog = Get-NetFirewallApplicationFilter | Where-Object {{ $_.Program -eq '{XRAY_EXE}' }}
-foreach ($f in $prog) {{ $r = $f | Get-NetFirewallRule; if ($r.Action -eq 'Block') {{ $r | Remove-NetFirewallRule }} }}
+foreach ($f in $prog) {{ $f | Get-NetFirewallRule | Remove-NetFirewallRule }}
+New-NetFirewallRule -DisplayName 'Svpn iPad (Xray)' -Direction Inbound -Program '{XRAY_EXE}' -RemoteAddress LocalSubnet,100.64.0.0/10 -Action Allow -Profile Any | Out-Null
 'ok'
 """
     code, txt = run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
@@ -803,6 +813,101 @@ def sha256_file(path):
     return h.hexdigest()
 
 
+UPDATE_HELPER = r'''
+import ctypes, os, shutil, subprocess, sys, time
+from datetime import datetime
+pid, stage, base, log_file = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
+cmd = sys.argv[5:]
+def log(m):
+    try:
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "  " + m + "\n")
+    except OSError:
+        pass
+k = ctypes.windll.kernel32
+h = k.OpenProcess(0x00100000, False, pid)          # SYNCHRONIZE
+if h:
+    k.WaitForSingleObject(h, 30000)
+    k.CloseHandle(h)
+time.sleep(1)
+ok = True
+for root, dirs, names in os.walk(stage):
+    for n in names:
+        if n == ".version":
+            continue
+        src = os.path.join(root, n)
+        dst = os.path.join(base, os.path.relpath(src, stage))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        for i in range(10):
+            try:
+                shutil.copyfile(src, dst)
+                break
+            except OSError:
+                time.sleep(1)
+        else:
+            ok = False
+            log("обновление: не получилось заменить " + os.path.relpath(src, stage))
+if ok:
+    shutil.rmtree(stage, ignore_errors=True)
+    log("обновление установлено, запускаю Svpn")
+else:                                  # чтобы при запуске не пытаться снова по кругу
+    try:
+        os.remove(os.path.join(stage, ".version"))
+    except OSError:
+        pass
+subprocess.Popen(cmd, close_fds=True, creationflags=0x00000008 | 0x00000200)
+'''
+
+
+def start_update_helper(stage):
+    """Подменить файлы можно, только когда Svpn закрыт. Это делает маленький
+    помощник на том же Python, что и сам Svpn, — без скрытого PowerShell,
+    который антивирусы любят молча останавливать. Он же запускает Svpn обратно."""
+    helper = os.path.join(DATA, "apply-update.py")
+    with open(helper, "w", encoding="utf-8") as fh:
+        fh.write(UPDATE_HELPER)
+    try:
+        os.remove(os.path.join(DATA, "apply-update.ps1"))
+    except OSError:
+        pass
+    py = sys.executable
+    if getattr(sys, "frozen", False):
+        raise RuntimeError("собранная версия обновляется установщиком")
+    if py.lower().endswith("python.exe") and os.path.exists(py[:-10] + "pythonw.exe"):
+        py = py[:-10] + "pythonw.exe"
+    args = [py, "-I", helper, str(os.getpid()), stage, BASE, LOG_FILE, *self_cmd()]
+    # «Отвязываемся» от Svpn, чтобы помощник не закрылся вместе с ним
+    for flags in (0x00000008 | 0x00000200 | 0x01000000, 0x00000008 | 0x00000200):
+        try:
+            subprocess.Popen(args, close_fds=True, creationflags=flags)
+            return
+        except OSError:
+            continue
+    raise RuntimeError("не получилось запустить установку обновления")
+
+
+def finish_pending_update():
+    """Если прошлое обновление скачалось, но не встало (помощника что-то остановило),
+    ставим его сейчас, при запуске, и перезапускаемся уже новой версией."""
+    stage = os.path.join(DATA, "update")
+    try:
+        with open(os.path.join(stage, ".version"), encoding="utf-8") as f:
+            ver = f.read().strip()
+    except OSError:
+        return False
+    if vtuple(ver) <= vtuple(VERSION):
+        import shutil
+        shutil.rmtree(stage, ignore_errors=True)
+        return False
+    log(f"доустанавливаю обновление {ver}, которое не встало в прошлый раз")
+    try:
+        start_update_helper(stage)
+    except Exception as e:
+        log(f"обновление не встало: {e}")
+        return False
+    return True
+
+
 class Updater:
     """Проверяет, не вышла ли новая версия, и ставит её.
 
@@ -882,24 +987,10 @@ class Updater:
             log(f"ставлю версию {m['version']} (файлов: {len(todo)})")
             # Подменить файлы можно только когда Svpn закрыт — это сделает
             # маленький скрипт, он же запустит Svpn обратно.
-            cmd = self_cmd()
-            restart = "Start-Process -FilePath '{}' -ArgumentList '{}'".format(
-                cmd[0], " ".join(f'"{c}"' for c in cmd[1:]).replace("'", "''")) \
-                if len(cmd) > 1 else f"Start-Process -FilePath '{cmd[0]}'"
-            ps = f"""
-$ErrorActionPreference = 'SilentlyContinue'
-Wait-Process -Id {os.getpid()} -Timeout 30
-Start-Sleep 1
-Copy-Item -Path '{stage}\\*' -Destination '{BASE}' -Recurse -Force
-Remove-Item -Path '{stage}' -Recurse -Force
-{restart}
-"""
-            script = os.path.join(DATA, "apply-update.ps1")
-            with open(script, "w", encoding="utf-8-sig") as fh:
-                fh.write(ps)
-            subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
-                              "-WindowStyle", "Hidden", "-File", script],
-                             creationflags=NOWIN | 0x00000008)
+            os.makedirs(stage, exist_ok=True)
+            with open(os.path.join(stage, ".version"), "w", encoding="utf-8") as fh:
+                fh.write(m["version"])
+            start_update_helper(stage)
             self.t.quit()
         except Exception as e:
             self.status = f"Обновление не встало: {e}"
@@ -1317,6 +1408,8 @@ def main_app():
     except OSError:
         pass
 
+    if finish_pending_update():
+        return                       # помощник сам запустит Svpn новой версии
     t = Svpn()
     log("Svpn запущен")
     with open(os.path.join(DATA, ".token"), "w", encoding="utf-8") as f:
