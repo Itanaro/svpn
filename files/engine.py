@@ -76,6 +76,12 @@ def default_sites():
            "googlevideo.com", "ytimg.com", "ggpht.com"]),
         S("Claude", ["claude.ai", "claude.com", "anthropic.com",
                      "claudeusercontent.com"], geo=True),
+        S("ChatGPT и Sora",
+          ["chatgpt.com", "openai.com", "oaiusercontent.com", "oaistatic.com",
+           "sora.com"], geo=True,
+          note="картинки и файлы идут с oaiusercontent.com"),
+        S("Leonardo", ["leonardo.ai"], geo=True,
+          note="весь сайт, включая картинки с cdn.leonardo.ai"),
         S("OpenRouter", ["openrouter.ai"], geo=True),
         S("Magnific и Freepik",
           ["magnific.ai", "magnific.com", "freepik.com", "freepiklabs.com",
@@ -122,7 +128,36 @@ def default_settings():
         "ipad": False,
         "theme": "night",
         "glass": True,
+        # Готовые пункты списка, которые пользователь уже видел: новые пункты
+        # из обновлений добавляются один раз, удалённые — не возвращаются.
+        "known_sites": [x["name"] for x in default_sites()],
     }
+
+
+# Пункты, которые были в списке до 1.1.6 — у старых настроек «знакомыми» считаем их.
+SITES_BEFORE_116 = [
+    "Adobe и Creative Cloud", "Google и Gemini", "Google: Доки, Диск, почта",
+    "YouTube", "Claude", "OpenRouter", "Magnific и Freepik", "Higgsfield",
+    "Плагины AlkaidVision и AI Lab", "fal.ai", "Hugging Face", "Tailscale",
+    "Проверка выхода",
+]
+
+
+def add_new_default_sites(s, known):
+    """Добавить в список готовые пункты, появившиеся в новой версии."""
+    known = list(known)
+    have = {x.get("name") for x in s["sites"]}
+    pos = max(0, len(s["sites"]) - 1)  # перед «Проверкой выхода», если она последняя
+    if not s["sites"] or s["sites"][-1].get("name") != "Проверка выхода":
+        pos = len(s["sites"])
+    for site in default_sites():
+        if site["name"] in known:
+            continue
+        known.append(site["name"])
+        if site["name"] not in have:
+            s["sites"].insert(pos, site)
+            pos += 1
+    s["known_sites"] = known
 
 
 def load_settings(path):
@@ -131,6 +166,7 @@ def load_settings(path):
         with open(path, encoding="utf-8") as f:
             saved = json.load(f)
         s.update({k: v for k, v in saved.items() if k in s})
+        add_new_default_sites(s, saved.get("known_sites", SITES_BEFORE_116))
     except (OSError, ValueError):
         pass
     return s
@@ -151,6 +187,42 @@ def clean_domain(d):
     if d.startswith("www."):
         d = d[4:]
     return d if re.fullmatch(r"[a-z0-9.\-]+\.[a-z0-9\-]+", d) else ""
+
+
+# Общие хостинги: у них поддомен — это отдельный сайт, обрезать нельзя.
+SHARED_HOSTS = (
+    "cloudfront.net", "amazonaws.com", "googleapis.com", "appspot.com",
+    "web.app", "firebaseapp.com", "github.io", "githubusercontent.com",
+    "vercel.app", "netlify.app", "pages.dev", "workers.dev", "herokuapp.com",
+    "azurewebsites.net", "blob.core.windows.net", "hf.space", "blogspot.com",
+    "r2.dev", "onrender.com", "fly.dev", "replit.app", "gradio.live",
+)
+# Двойные зоны: у них «сайт» — три последних части (bbc.co.uk).
+TWO_PART_ZONES = (
+    "co.uk", "org.uk", "ac.uk", "com.au", "co.jp", "co.kr", "com.br",
+    "com.cn", "com.tr", "com.ua", "com.ru", "msk.ru", "spb.ru", "co.in",
+)
+
+
+def site_domain(d):
+    """«app.leonardo.ai» → «leonardo.ai»: тогда в туннель попадут и картинки
+    с cdn.leonardo.ai. На общих хостингах (*.cloudfront.net) адрес не трогаем."""
+    d = clean_domain(d)
+    if not d:
+        return ""
+    if any(d.endswith("." + h) for h in SHARED_HOSTS):
+        return d
+    parts = d.split(".")
+    keep = 3 if ".".join(parts[-2:]) in TWO_PART_ZONES else 2
+    return ".".join(parts[-keep:])
+
+
+def preset_for(domain):
+    """Готовый пункт списка, к которому относится адрес (chatgpt.com → «ChatGPT и Sora»)."""
+    for site in default_sites():
+        if any(domain == x or domain.endswith("." + x) for x in site["domains"]):
+            return site
+    return None
 
 
 def active_domains(s, geo=None):

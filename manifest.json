@@ -1,16 +1,16 @@
 {
- "version": "1.1.5",
- "notes": "Svpn больше не просит права администратора при каждом запуске — только один раз после этого обновления. Брандмауэр перестал спрашивать про Xray. Обновление теперь ставится надёжнее и само перезапускает Svpn; если что-то помешало — доустановится при следующем запуске.",
+ "version": "1.1.6",
+ "notes": "Новые готовые пункты в «Сайтах»: ChatGPT и Sora (вместе с адресами картинок) и Leonardo. Если вставить ссылку вроде app.leonardo.ai/…, Svpn сам возьмёт весь сайт — так в туннель попадают и картинки. Адрес известного сервиса подтягивает все его домены.",
  "mandatory": false,
  "files": [
   {
    "path": "app.py",
-   "sha256": "d1285c41934edeea536a47076f9cf837e19d318296a24632e6ddc0b32c368bec",
+   "sha256": "f9bf6eee2190b6c4f47b5000f281c5d7ec27f895831922a76fafc71213fc8767",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
   },
   {
    "path": "engine.py",
-   "sha256": "60c3622e2928cc485237472441bfe08ba12b21ee431192ce493d0fde695c27bd",
+   "sha256": "17c38cdaa5bd9fbec016f5e0d6b092f2f35e2b7e1121d38a3c35ca449b627dd1",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/engine.py"
   },
   {

@@ -57,7 +57,7 @@ TASK = "Svpn Interceptor"
 # При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
 # (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
 CLEANUP_TASK = "Svpn Cleanup"
-VERSION = "1.1.5"
+VERSION = "1.1.6"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -1115,11 +1115,24 @@ def handle_action(t, name, b):
         s["ipad"] = bool(b.get("on"))
     elif name == "site":
         if "add" in b:
-            d = E.clean_domain(b["add"])
+            d = E.site_domain(b["add"])
             if not d:
                 raise ValueError("Не похоже на адрес сайта")
-            s["sites"].append({"name": d, "domains": [d], "on": True, "geo": False, "note": ""})
-            log(f"добавлен сайт {d}")
+            preset = E.preset_for(d)
+            if preset:
+                # Известный сервис: берём готовый пункт со всеми его адресами
+                # (у ChatGPT картинки идут с другого домена).
+                for site in s["sites"]:
+                    if site.get("name") == preset["name"]:
+                        site["on"] = True
+                        log(f"сайт {d} уже в списке ({preset['name']}) — включила")
+                        break
+                else:
+                    s["sites"].append(preset)
+                    log(f"добавлен сайт {preset['name']}")
+            else:
+                s["sites"].append({"name": d, "domains": [d], "on": True, "geo": False, "note": ""})
+                log(f"добавлен сайт {d}")
         else:
             i = int(b["i"])
             site = s["sites"][i]
