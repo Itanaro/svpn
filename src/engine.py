@@ -650,3 +650,190 @@ function FindProxyForURL(url, host) {{
     return "DIRECT";
 }}
 """
+
+
+# ---------------------------------------------------------------- айфон и айпад
+
+# Профиль для приложения sing-box на айфоне/айпаде. Там нельзя ловить трафик
+# по программам, поэтому вместо «Программ» — сайты и адреса серверов.
+PHONE_FILE_NAME = "svpn-phone.json"
+
+# App Store и загрузки приложений (без VPN у неё не работают).
+PHONE_APPLE = ["apple.com", "mzstatic.com", "itunes.com", "cdn-apple.com",
+               "aaplimg.com", "apple-cloudkit.com"]
+
+# Телеграм ходит к своим серверам по цифровым адресам, а не по именам сайтов.
+TELEGRAM_DOMAINS = ["telegram.org", "telegram.me", "t.me", "telegra.ph",
+                    "telesco.pe", "cdn-telegram.org", "tdesktop.com", "graph.org"]
+TELEGRAM_IPS = [
+    "91.108.4.0/22", "91.108.8.0/22", "91.108.12.0/22", "91.108.16.0/22",
+    "91.108.20.0/22", "91.108.56.0/22", "91.105.192.0/23", "149.154.160.0/20",
+    "185.76.151.0/24", "95.161.64.0/20",
+    "2001:b28:f23c::/48", "2001:b28:f23d::/48", "2001:b28:f23f::/48",
+    "2001:67c:4e8::/48", "2a0a:f280::/32",
+]
+
+UTLS_FP = ("chrome", "firefox", "edge", "safari", "360", "qq", "ios",
+           "android", "random", "randomized")
+
+
+def _sb_tls(st):
+    """streamSettings Xray → блок tls sing-box (или None без шифрования)."""
+    sec = st.get("security", "none")
+    if sec == "reality":
+        r = st.get("realitySettings", {})
+        fp = r.get("fingerprint") or "chrome"
+        return {"enabled": True, "server_name": r.get("serverName", ""),
+                "utls": {"enabled": True,
+                         "fingerprint": fp if fp in UTLS_FP else "chrome"},
+                "reality": {"enabled": True,
+                            "public_key": r.get("publicKey") or r.get("password", ""),
+                            "short_id": r.get("shortId", "")}}
+    if sec == "tls":
+        t = st.get("tlsSettings", {})
+        out = {"enabled": True}
+        if t.get("serverName"):
+            out["server_name"] = t["serverName"]
+        if t.get("alpn"):
+            out["alpn"] = t["alpn"]
+        if t.get("allowInsecure"):
+            out["insecure"] = True
+        fp = t.get("fingerprint")
+        if fp:
+            out["utls"] = {"enabled": True,
+                           "fingerprint": fp if fp in UTLS_FP else "chrome"}
+        return out
+    return None
+
+
+def _sb_transport(st):
+    """Транспорт sing-box. False — такой транспорт sing-box не умеет."""
+    net = st.get("network", "tcp")
+    if net in ("tcp", "raw"):
+        hdr = (st.get("tcpSettings") or st.get("rawSettings") or {}).get("header", {})
+        return None if hdr.get("type", "none") == "none" else False
+    if net == "ws":
+        w = st.get("wsSettings", {})
+        tr = {"type": "ws", "path": w.get("path", "/")}
+        host = w.get("host") or (w.get("headers") or {}).get("Host")
+        if host:
+            tr["headers"] = {"Host": host}
+        return tr
+    if net == "grpc":
+        return {"type": "grpc",
+                "service_name": st.get("grpcSettings", {}).get("serviceName", "")}
+    if net == "httpupgrade":
+        h = st.get("httpupgradeSettings", {})
+        tr = {"type": "httpupgrade", "path": h.get("path", "/")}
+        if h.get("host"):
+            tr["host"] = h["host"]
+        return tr
+    return False   # xhttp и прочее — на телефоне пропускаем
+
+
+def xray_to_singbox(tag, ob):
+    """Сервер в формате Xray → сервер sing-box. None — не переводится."""
+    p = ob.get("protocol")
+    st = ob.get("streamSettings") or {}
+    s = ob.get("settings") or {}
+    if p == "hysteria":
+        t = st.get("tlsSettings", {})
+        tls = {"enabled": True, "server_name": t.get("serverName") or s.get("address"),
+               "alpn": t.get("alpn") or ["h3"]}
+        if t.get("allowInsecure"):
+            tls["insecure"] = True
+        return {"type": "hysteria2", "tag": tag, "server": s.get("address"),
+                "server_port": int(s.get("port") or 443),
+                "password": st.get("hysteriaSettings", {}).get("auth", ""), "tls": tls}
+    tr = _sb_transport(st)
+    if tr is False:
+        return None
+    if p in ("vless", "vmess"):
+        v = (s.get("vnext") or [{}])[0]
+        u = (v.get("users") or [{}])[0]
+        out = {"type": p, "tag": tag, "server": v.get("address"),
+               "server_port": int(v.get("port") or 443), "uuid": u.get("id", "")}
+        if p == "vless":
+            if u.get("flow"):
+                out["flow"] = u["flow"]
+        else:
+            out["security"] = u.get("security", "auto")
+            out["alter_id"] = int(u.get("alterId", 0))
+    elif p == "trojan":
+        v = (s.get("servers") or [{}])[0]
+        out = {"type": "trojan", "tag": tag, "server": v.get("address"),
+               "server_port": int(v.get("port") or 443), "password": v.get("password", "")}
+    elif p == "shadowsocks":
+        v = (s.get("servers") or [{}])[0]
+        return {"type": "shadowsocks", "tag": tag, "server": v.get("address"),
+                "server_port": int(v.get("port") or 443), "method": v.get("method", ""),
+                "password": v.get("password", "")}
+    else:
+        return None
+    if not out.get("server"):
+        return None
+    tls = _sb_tls(st)
+    if tls:
+        out["tls"] = tls
+    if tr:
+        out["transport"] = tr
+    return out
+
+
+def build_phone(s, nodes, checks=None):
+    """Профиль sing-box для айфона и айпада: те же серверы и сайты, что на компе.
+
+    «Авто» — самый быстрый живой сервер, «Европа» — для сайтов с отметкой
+    «Европа». Всё, чего нет в списке, идёт напрямую. Возвращает None, если
+    серверов нет.
+    """
+    outs, used = [], set()
+    auto, geo = [], []
+    for i, (name, ob) in enumerate(nodes[:MAX_NODES]):
+        tag = re.sub(r"\s+", " ", str(name)).strip() or f"Сервер {i + 1}"
+        base, k = tag, 2
+        while tag in used or tag in ("Авто", "Европа", "Напрямую"):
+            tag, k = f"{base} {k}", k + 1
+        sb = xray_to_singbox(tag, ob)
+        if not sb:
+            continue
+        used.add(tag)
+        outs.append(sb)
+        c = checks.get(node_key(ob)) if checks else None
+        if c is not None:
+            auto.append(tag)
+            if c.get("strict_ok"):
+                geo.append(tag)
+        else:
+            if not is_mobile(name):
+                auto.append(tag)
+            if not is_ru(name) and not is_mobile(name):
+                geo.append(tag)
+    if not outs:
+        return None
+    auto = auto or [o["tag"] for o in outs]
+    geo = geo or auto
+    test = {"url": PROBE_URL, "interval": "3m", "tolerance": 50}
+    rules = [{"action": "sniff"},
+             {"protocol": "dns", "action": "hijack-dns"},
+             {"ip_is_private": True, "outbound": "Напрямую"}]
+    names, _ = active_apps(s)
+    if "telegram.exe" in [n.lower() for n in names]:
+        rules.append({"domain_suffix": TELEGRAM_DOMAINS, "ip_cidr": TELEGRAM_IPS,
+                      "outbound": "Авто"})
+    geo_d = active_domains(s, geo=True)
+    if geo_d:
+        rules.append({"domain_suffix": geo_d, "outbound": "Европа"})
+    main_d = active_domains(s, geo=False)
+    main_d += [d for d in PHONE_APPLE if d not in main_d]
+    rules.append({"domain_suffix": main_d, "outbound": "Авто"})
+    return {
+        "log": {"level": "warn"},
+        "inbounds": [{"type": "tun", "tag": "tun-in", "address": ["172.19.0.1/30"],
+                      "auto_route": True, "strict_route": True, "stack": "mixed"}],
+        "outbounds": [dict(type="urltest", tag="Авто", outbounds=auto, **test),
+                      dict(type="urltest", tag="Европа", outbounds=geo, **test),
+                      *outs,
+                      {"type": "direct", "tag": "Напрямую"}],
+        "route": {"rules": rules, "final": "Напрямую", "auto_detect_interface": True},
+    }

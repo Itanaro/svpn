@@ -24,6 +24,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -52,12 +53,16 @@ XRAY_LOG = os.path.join(DATA, "xray_error.log")
 SB_LOG = os.path.join(DATA, "singbox.log")
 XRAY_EXE = os.path.join(BIN, "xray.exe")
 SB_EXE = os.path.join(BIN, "sing-box.exe")
+# Профиль для айфона и айпада: копия рядом и ключ GitHub для секретной заметки (Gist).
+PHONE_OUT = os.path.join(DATA, E.PHONE_FILE_NAME)
+PHONE_CFG = os.path.join(DATA, "phone.json")
+TOKEN_PAGE = "https://github.com/settings/tokens/new?scopes=gist&description=Svpn%20iPhone"
 
 TASK = "Svpn Interceptor"
 # При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
 # (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
 CLEANUP_TASK = "Svpn Cleanup"
-VERSION = "1.1.6"
+VERSION = "1.1.7"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -397,6 +402,13 @@ class Svpn:
         except (OSError, ValueError):
             pass
         self.token = secrets.token_urlsafe(16)
+        self.phone = {}
+        self.phone_lock = threading.Lock()
+        try:
+            with open(PHONE_CFG, encoding="utf-8") as f:
+                self.phone = json.load(f)
+        except (OSError, ValueError):
+            pass
         self.on_change = lambda: None
         self._load_nodes()
 
@@ -535,6 +547,8 @@ class Svpn:
             else:
                 self.interceptor(False)
                 self.health = "off"
+        if self.phone.get("token"):
+            threading.Thread(target=self._phone_bg, daemon=True).start()
         self.on_change()
 
     def _quick_check(self):
@@ -554,6 +568,105 @@ class Svpn:
 
     def save(self):
         E.save_settings(SETTINGS, self.s)
+
+    # --- айфон и айпад
+    def _phone_save(self):
+        tmp = PHONE_CFG + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(self.phone, f, ensure_ascii=False)
+        os.replace(tmp, PHONE_CFG)
+
+    def _github(self, method, path, token, body=None):
+        """Запрос к GitHub: сначала напрямую, не вышло — через свой VPN."""
+        data = json.dumps(body).encode("utf-8") if body is not None else None
+        err = None
+        vpn = f"http://127.0.0.1:{E.HTTP_PORT}"
+        for proxy in (None, vpn):
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler(
+                {"http": proxy, "https": proxy} if proxy else {}))
+            req = urllib.request.Request(
+                "https://api.github.com" + path, data=data, method=method,
+                headers={"Authorization": "Bearer " + token,
+                         "Accept": "application/vnd.github+json",
+                         "User-Agent": "Svpn", "Content-Type": "application/json"})
+            try:
+                with opener.open(req, timeout=30) as r:
+                    return r.status, json.loads(r.read() or b"{}")
+            except urllib.error.HTTPError as e:
+                try:
+                    return e.code, json.loads(e.read() or b"{}")
+                except ValueError:
+                    return e.code, {}
+            except Exception as e:
+                err = e
+        raise ValueError(f"GitHub не отвечает ({str(err)[:60]})")
+
+    def phone_publish(self, force=False, token=None):
+        """Собрать профиль для айфона и выложить в секретную заметку на GitHub.
+        Если профиль не поменялся — ничего не делает."""
+        with self.phone_lock:
+            cfg = E.build_phone(self.s, self.all_nodes(), self.checks)
+            if not cfg:
+                if force:
+                    raise ValueError("Сначала добавь подписку VPN — без серверов профиль пустой")
+                return
+            text = json.dumps(cfg, ensure_ascii=False, indent=1)
+            try:
+                with open(PHONE_OUT, "w", encoding="utf-8") as f:
+                    f.write(text)
+            except OSError:
+                pass
+            token = token or self.phone.get("token")
+            if not token:
+                return
+            import hashlib
+            h = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            if h == self.phone.get("hash") and self.phone.get("url") and not force:
+                return
+            files = {E.PHONE_FILE_NAME: {"content": text}}
+            try:
+                st, r = None, None
+                if self.phone.get("gist_id"):
+                    st, r = self._github("PATCH", "/gists/" + self.phone["gist_id"], token,
+                                         {"files": files})
+                if st is None or st == 404:
+                    st, r = self._github("POST", "/gists", token, {
+                        "description": "Svpn — профиль для айфона и айпада",
+                        "public": False, "files": files})
+                if st in (401, 403):
+                    raise ValueError("GitHub не принял ключ. Создай новый с галочкой «gist»")
+                if st not in (200, 201):
+                    raise ValueError(f"GitHub ответил ошибкой {st}: {r.get('message', '')[:80]}")
+            except ValueError as e:
+                self.phone["error"] = str(e)
+                self._phone_save()
+                self.on_change()
+                log("профиль для айфона не выложился: " + str(e))
+                raise
+            login = (r.get("owner") or {}).get("login", "")
+            gid = r.get("id", "")
+            new = not self.phone.get("url")
+            self.phone.update(token=token, gist_id=gid, login=login, hash=h,
+                              url=f"https://gist.githubusercontent.com/{login}/{gid}/raw/{E.PHONE_FILE_NAME}",
+                              last=time.time(), error="")
+            self._phone_save()
+            log("профиль для айфона выложен" if new else "профиль для айфона обновлён")
+        self.on_change()
+
+    def _phone_bg(self):
+        try:
+            self.phone_publish()
+        except Exception:
+            pass                           # ошибка уже в журнале и в окне
+
+    def phone_state(self):
+        p = self.phone
+        url = p.get("url", "") if p.get("token") else ""
+        imp = ("sing-box://import-remote-profile?url=" + urllib.parse.quote(url, safe="")
+               + "#" + urllib.parse.quote("Svpn")) if url else ""
+        last = datetime.fromtimestamp(p["last"]).strftime("%d.%m %H:%M") if p.get("last") else ""
+        return {"on": bool(p.get("token")), "url": url, "import": imp, "last": last,
+                "error": p.get("error", ""), "local": PHONE_OUT}
 
     # --- проверки
     def probe(self, url=E.PROBE_URL, timeout=10):
@@ -779,6 +892,7 @@ class Svpn:
                         "mandatory": bool(self.updater.available.get("mandatory"))}
                        if getattr(self, "updater", None) and self.updater.available else None),
             "update_status": getattr(self, "updater", None) and self.updater.status or "",
+            "phone": self.phone_state(),
         }
 
 
@@ -1030,7 +1144,8 @@ def make_ui_handler(t):
             if path in ("/", "/index.html"):
                 with open(os.path.join(UI_DIR, "index.html"), "rb") as f:
                     return self.send(200, f.read(), "text/html; charset=utf-8")
-            static = {"/favicon.png": "image/png", "/svpn.png": "image/png"}
+            static = {"/favicon.png": "image/png", "/svpn.png": "image/png",
+                      "/qrcode.js": "text/javascript; charset=utf-8"}
             if path in static:
                 with open(os.path.join(UI_DIR, path[1:]), "rb") as f:
                     return self.send(200, f.read(), static[path])
@@ -1113,6 +1228,26 @@ def handle_action(t, name, b):
         return
     elif name == "ipad":
         s["ipad"] = bool(b.get("on"))
+    elif name == "phone_token_page":
+        if IS_WIN:
+            os.startfile(TOKEN_PAGE)
+        return
+    elif name == "phone_token":
+        tok = (b.get("token") or "").strip()
+        if not tok.startswith(("ghp_", "github_pat_", "gho_")):
+            raise ValueError("Это не похоже на ключ GitHub — он начинается с ghp_")
+        t.phone_publish(force=True, token=tok)
+        return
+    elif name == "phone_publish":
+        if not t.phone.get("token"):
+            raise ValueError("Сначала вставь ключ GitHub")
+        t.phone_publish(force=True)
+        return
+    elif name == "phone_forget":
+        t.phone = {}
+        t._phone_save()
+        log("ключ GitHub для айфона удалён")
+        return
     elif name == "site":
         if "add" in b:
             d = E.site_domain(b["add"])

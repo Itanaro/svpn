@@ -434,6 +434,15 @@ input::placeholder, textarea::placeholder { color: var(--ink-3); }
 .tag.yes { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 32%, transparent); background: color-mix(in srgb, var(--ok) 8%, transparent); }
 .tag.no { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 32%, transparent); background: color-mix(in srgb, var(--danger) 8%, transparent); }
 .tag.eu { color: var(--geo); border-color: color-mix(in srgb, var(--geo) 40%, transparent); background: var(--geo-soft); }
+.steps { margin: 12px 0 0; padding-left: 20px; color: var(--ink-2); font-size: 13px; line-height: 1.6; }
+.steps li { margin-top: 8px; }
+.steps .btn { margin-top: 6px; }
+.qr-wrap { display: flex; gap: 18px; align-items: center; margin-top: 14px; }
+.qr { flex: none; width: 156px; height: 156px; padding: 8px; border-radius: 14px; background: #fff;
+  box-shadow: 0 0 0 1px var(--line-2), var(--shadow); }
+.qr svg { display: block; width: 100%; height: 100%; }
+.qr-wrap .hint { margin: 0; }
+.phone-err { margin: 10px 0 0; color: var(--danger); font-size: 12.5px; }
 .checks { margin: 10px 0 0; padding: 0; list-style: none; }
 .checks li { padding: 8px 0; display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); }
 .checks .ok { color: var(--ok); font-weight: 600; }
@@ -589,6 +598,29 @@ input::placeholder, textarea::placeholder { color: var(--ink-3); }
       <div class="code" id="pacUrl"></div>
     </div>
 
+    <div class="block" id="phone">
+      <div class="line">
+        <div><h2>Айфон и айпад</h2><div class="hint" id="phoneHint">Профиль для приложения sing-box — те же серверы и сайты, что здесь</div></div>
+        <button class="btn" id="phonePub" hidden>Обновить сейчас</button>
+      </div>
+      <ol class="steps" id="phoneSetup">
+        <li>Создай ключ на GitHub: срок — <b>No expiration</b>, галочка <b>gist</b> уже стоит. Внизу нажми <b>Generate token</b> и скопируй ключ.<br>
+          <button class="btn" id="phoneTokPage">Открыть GitHub</button></li>
+        <li>Вставь ключ сюда — Svpn выложит профиль в секретную заметку и будет обновлять его сам.
+          <form class="add" id="phoneTokForm" style="margin-top:6px">
+            <input id="phoneTok" placeholder="ghp_…" spellcheck="false" autocomplete="off" aria-label="Ключ GitHub">
+            <button class="btn primary">Подключить</button>
+          </form></li>
+      </ol>
+      <div class="qr-wrap" id="phoneReady" hidden>
+        <div class="qr" id="phoneQr" role="img" aria-label="QR-код профиля для sing-box"></div>
+        <div class="hint">Наведи камеру айфона или айпада на код — откроется sing-box, нажми «Импорт».
+          В профиле включи <b>автообновление</b>: новые серверы и сайты приедут сами.<br><br>
+          <button class="btn link" id="phoneOff">Отключить</button></div>
+      </div>
+      <p class="phone-err" id="phoneErr" hidden></p>
+    </div>
+
     <div class="block">
       <div class="line"><h2>Проверка связи</h2><button class="btn" id="check">Проверить</button></div>
       <ul class="checks" id="checks"></ul>
@@ -608,6 +640,7 @@ input::placeholder, textarea::placeholder { color: var(--ink-3); }
 
 <div class="toast" id="toast" role="status"></div>
 
+<script src="/qrcode.js"></script>
 <script>
 const T = new URLSearchParams(location.search).get('t') || '';
 const $ = id => document.getElementById(id);
@@ -753,6 +786,7 @@ function render(st) {
     sm.value = subs; sm.dataset.shown = subs;
   }
   renderServers(st);
+  renderPhone(st.phone || {});
   $('ver').textContent = st.version || '';
   const u = st.update, up = $('upd');
   up.hidden = !u && !st.update_status;
@@ -765,6 +799,21 @@ function render(st) {
   }
   stick();
   $('log').innerHTML = (st.log || []).slice().reverse().map(l => `<div><time>${esc(l[0])}</time>${esc(l[1])}</div>`).join('');
+}
+
+function renderPhone(p) {
+  $('phoneSetup').hidden = !!p.on;
+  $('phoneReady').hidden = !p.on || !p.import;
+  $('phonePub').hidden = !p.on;
+  $('phoneHint').textContent = p.on && p.last ? `Профиль обновлён ${p.last} — Svpn следит за ним сам`
+    : 'Профиль для приложения sing-box — те же серверы и сайты, что здесь';
+  $('phoneErr').hidden = !p.error;
+  $('phoneErr').textContent = p.error || '';
+  if (p.import && $('phoneQr').dataset.v !== p.import && window.qrcode) {
+    const q = qrcode(0, 'M'); q.addData(p.import); q.make();
+    $('phoneQr').innerHTML = q.createSvgTag(4, 0);
+    $('phoneQr').dataset.v = p.import;
+  }
 }
 
 function setTheme(name) {
@@ -806,6 +855,12 @@ $('addApp').onsubmit = e => { e.preventDefault(); const v = $('newApp').value.tr
   act('app', {add: v}, 'Программа добавлена').then(() => $('newApp').value = ''); };
 $('saveSubs').onclick = () => (delete $('subMain').dataset.shown, act('subs', {main: $('subMain').value.split(/\s+/).filter(Boolean), geo: []},
   'Подписка сохранена. Через минуту проверю серверы'));
+$('phoneTokPage').onclick = () => act('phone_token_page', {});
+$('phoneTokForm').onsubmit = e => { e.preventDefault(); const v = $('phoneTok').value.trim(); if (!v) return;
+  toast('Выкладываю профиль…');
+  act('phone_token', {token: v}, 'Готово! Наведи камеру телефона на QR-код').then(() => { if (S.phone && S.phone.on) $('phoneTok').value = ''; }); };
+$('phonePub').onclick = () => act('phone_publish', {}, 'Профиль обновлён');
+$('phoneOff').onclick = () => act('phone_forget', {}, 'Отключено');
 $('updBtn').onclick = () => act('update', {}, 'Скачиваю обновление');
 $('checkUpd').onclick = () => act('check_update', {}).then(() => { if (!S.update) toast('Стоит последняя версия'); });
 $('checkNodes').onclick = () => act('check_nodes', {}, 'Проверяю серверы');
