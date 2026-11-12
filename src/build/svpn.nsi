@@ -6,7 +6,7 @@ SetCompressor /SOLID lzma
 SetCompressorDictSize 64
 
 !ifndef VERSION
-  !define VERSION "1.1.0"
+  !define VERSION "1.1.7"
 !endif
 !define APP "Svpn"
 !define UNKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Svpn"
