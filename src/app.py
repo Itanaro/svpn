@@ -62,7 +62,7 @@ TASK = "Svpn Interceptor"
 # При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
 # (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
 CLEANUP_TASK = "Svpn Cleanup"
-VERSION = "1.1.7"
+VERSION = "1.1.8"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -396,6 +396,9 @@ class Svpn:
         self.nodes = {"main": [], "geo": []}
         self.checks = {}
         self.checking = False
+        self.sticky = None          # ключ сервера для YouTube
+        self.sticky_bad = {}        # ключ → когда отказал
+        self.sticky_fails = 0
         try:
             with open(CHECKS, encoding="utf-8") as f:
                 self.checks = json.load(f)
@@ -471,8 +474,16 @@ class Svpn:
     # --- конфиги и процессы
     def write_configs(self):
         on = self.s["enabled"]
-        x = E.build_xray(self.s, self.all_nodes(), enabled=on,
-                         log_path=XRAY_LOG, checks=self.checks)
+        nodes = self.all_nodes()
+        now = time.time()
+        self.sticky_bad = {k: t for k, t in self.sticky_bad.items() if now - t < 1800}
+        si = E.pick_sticky(nodes, self.checks, self.sticky, set(self.sticky_bad))
+        new_key = E.node_key(nodes[si][1]) if si is not None else None
+        if new_key != self.sticky and si is not None:
+            log(f"YouTube держу на одном сервере: {nodes[si][0]}")
+        self.sticky, self.sticky_fails = new_key, 0
+        x = E.build_xray(self.s, nodes, enabled=on,
+                         log_path=XRAY_LOG, checks=self.checks, sticky=si)
         sb = E.build_singbox(self.s, log_path=SB_LOG)
         changed = []
         for path, cfg in ((XRAY_CFG, x), (SB_CFG, sb)):
@@ -847,6 +858,7 @@ class Svpn:
             self.problem = ""
             if not process_running("sing-box.exe"):
                 self.interceptor(True)
+            self._watch_sticky()
             if n % 30 == 1 or not self.exit:
                 try:
                     st, body = self.probe("https://api.country.is/", 15)
@@ -876,6 +888,37 @@ class Svpn:
                                 "Если долго не проходит — проверь подписку в настройках.")
         if prev != self.health:
             self.on_change()
+
+    def _watch_sticky(self):
+        """Сервер для YouTube жив? Два отказа подряд — переезжаем на другой."""
+        if not self.sticky or not E.sticky_domains(self.s):
+            return
+        nodes = self.all_nodes()[:E.MAX_NODES]
+        idx = next((i for i, (_, ob) in enumerate(nodes)
+                    if E.node_key(ob) == self.sticky), None)
+        if idx is None:
+            return
+        try:
+            st, _ = self.probe_via(f"http://127.0.0.1:{E.TEST_PORT_BASE + idx}")
+            ok = st == 204
+        except Exception:
+            ok = False
+        if ok:
+            self.sticky_fails = 0
+            return
+        self.sticky_fails += 1
+        if self.sticky_fails >= 2:
+            log(f"сервер для YouTube ({nodes[idx][0]}) не отвечает — меняю")
+            self.sticky_bad[self.sticky] = time.time()
+            self.sticky = None
+            self.apply()
+
+    def probe_via(self, proxy, url=E.PROBE_URL, timeout=10):
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler(
+            {"http": proxy, "https": proxy}))
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with opener.open(req, timeout=timeout) as r:
+            return r.status, r.read(400)
 
     def state(self):
         return {

@@ -500,7 +500,40 @@ def pick_nodes(nodes, checks):
     return main, geo
 
 
-def build_xray(s, nodes, enabled=True, log_path=None, checks=None):
+# Сайты, которым нельзя менять выход посреди работы: YouTube выдаёт ссылку на
+# поток под конкретный адрес, и если поток пойдёт через другой сервер — отказ
+# («нет подключения» при переключении трека). Их держим на одном сервере.
+STICKY_DOMAINS = ["youtube.com", "youtu.be", "youtube-nocookie.com",
+                  "googlevideo.com", "ytimg.com", "ggpht.com", "youtubei.googleapis.com"]
+
+
+def sticky_domains(s):
+    """Домены «одного сервера», если такой сайт включён в списке."""
+    act = active_domains(s, geo=False)
+    return [d for d in STICKY_DOMAINS if d in act or
+            (d == "youtubei.googleapis.com" and "youtube.com" in act)]
+
+
+def pick_sticky(nodes, checks, current=None, avoid=()):
+    """Один сервер для «капризных» сайтов: текущий, пока он жив, иначе самый
+    быстрый живой, по возможности не российский. Возвращает индекс или None."""
+    nodes = nodes[:MAX_NODES]
+    main_i, _ = pick_nodes(nodes, checks)
+    ok = [i for i in main_i if node_key(nodes[i][1]) not in avoid]
+    if not ok:
+        return None
+    for i in ok:
+        if node_key(nodes[i][1]) == current:
+            return i
+
+    def score(i):
+        c = (checks or {}).get(node_key(nodes[i][1])) or {}
+        ru = c.get("country") == "RU" or is_ru(nodes[i][0])
+        return (ru, c.get("ping") or 99999, i)
+    return min(ok, key=score)
+
+
+def build_xray(s, nodes, enabled=True, log_path=None, checks=None, sticky=None):
     """nodes — список (название, outbound) из всех подписок.
 
     enabled=False: Xray остаётся на тех же портах, но всё пускает напрямую,
@@ -562,6 +595,14 @@ def build_xray(s, nodes, enabled=True, log_path=None, checks=None):
                           "enableConcurrency": True}
     cfg["routing"]["balancers"].append(
         {"tag": "auto", "selector": main_sel, "strategy": {"type": "leastPing"}})
+    st_domains = sticky_domains(s)
+    if sticky is not None and 0 <= sticky < len(nodes) and st_domains:
+        doms = ["domain:" + d for d in st_domains]
+        # быстрый способ связи (QUIC) многие серверы не пропускают — сразу
+        # отказываем, чтобы плеер не ждал, а шёл обычным путём
+        rules.append({"type": "field", "network": "udp", "port": "443",
+                      "domain": doms, "outboundTag": "block"})
+        rules.append({"type": "field", "domain": doms, "outboundTag": f"n{sticky}"})
     geo_domains = active_domains(s, geo=True)
     if geo_sel and geo_domains:
         cfg["routing"]["balancers"].append(

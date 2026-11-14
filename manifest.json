@@ -1,16 +1,16 @@
 {
- "version": "1.1.7",
- "notes": "Профиль для айфона и айпада: в Настройках → «Айфон и айпад» подключи ключ GitHub, и Svpn сам выложит профиль для приложения sing-box в секретную заметку. Наведи камеру телефона на QR-код — профиль подключится и дальше будет обновляться сам. Плюс готовый пункт «Telegram в браузере».",
+ "version": "1.1.8",
+ "notes": "YouTube и YouTube Music больше не обрываются при переключении треков: их трафик теперь всегда идёт через один сервер (если он отвалится — Svpn сам переедет на другой).",
  "mandatory": false,
  "files": [
   {
    "path": "app.py",
-   "sha256": "cb8fcb01c1229520057e12e587da9bd0e054a9e9f0431ef9c751c0f9e1141bf5",
+   "sha256": "5d995279e7d6061929af3259559290614968d5e1016692d6c90f2ce819f31951",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
   },
   {
    "path": "engine.py",
-   "sha256": "8a7d582a17836bb17d85d57f93a307874a4221fa12a58e44a79e989e4e970083",
+   "sha256": "7514cd677a49f5195399ced3a5131ee678a83c8c52faece961bf0e53d219e35a",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/engine.py"
   },
   {
