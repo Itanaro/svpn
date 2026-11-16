@@ -1,16 +1,16 @@
 {
- "version": "1.1.8",
- "notes": "YouTube и YouTube Music больше не обрываются при переключении треков: их трафик теперь всегда идёт через один сервер (если он отвалится — Svpn сам переедет на другой).",
+ "version": "1.1.9",
+ "notes": "Обрывы VPN чинятся быстрее: Svpn замечает пропажу связи примерно за 20–30 секунд вместо минуты и сразу уходит с зависшего сервера на 30 минут. В журнал пишется, какие серверы отвечали в момент обрыва. В список сайтов добавлены Instagram, WhatsApp и Facebook.",
  "mandatory": false,
  "files": [
   {
    "path": "app.py",
-   "sha256": "5d995279e7d6061929af3259559290614968d5e1016692d6c90f2ce819f31951",
+   "sha256": "9b966f181d4731493e46cdcd5caa02c63d834e75876086937bb5dbd0b424b13b",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
   },
   {
    "path": "engine.py",
-   "sha256": "7514cd677a49f5195399ced3a5131ee678a83c8c52faece961bf0e53d219e35a",
+   "sha256": "ba8e117c7ee2c04f6e926fde949e968b1a0cca79c4f5b5f62dec66598aa0bec2",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/engine.py"
   },
   {

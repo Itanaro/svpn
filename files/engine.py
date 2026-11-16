@@ -97,6 +97,12 @@ def default_sites():
           ["alkaidvision.com", "alkaidart.com", "picture-instruments.com"]),
         S("fal.ai", ["fal.run", "fal.ai", "fal.media"]),
         S("Hugging Face", ["huggingface.co", "hf.co", "hf.space"]),
+        S("Instagram, WhatsApp, Facebook",
+          ["instagram.com", "cdninstagram.com", "ig.me",
+           "whatsapp.com", "whatsapp.net", "wa.me",
+           "facebook.com", "facebook.net", "fbcdn.net", "fbsbx.com", "fb.com",
+           "fb.me", "messenger.com", "threads.net", "threads.com"],
+          note="сайты и веб-версии Meta"),
         S("Tailscale", ["tailscale.com", "tailscale.io"]),
         S("Проверка выхода", ["api.country.is", "ifconfig.co"], geo=True,
           note="служебное: показывает страну выхода"),
@@ -533,7 +539,8 @@ def pick_sticky(nodes, checks, current=None, avoid=()):
     return min(ok, key=score)
 
 
-def build_xray(s, nodes, enabled=True, log_path=None, checks=None, sticky=None):
+def build_xray(s, nodes, enabled=True, log_path=None, checks=None, sticky=None,
+               avoid=()):
     """nodes — список (название, outbound) из всех подписок.
 
     enabled=False: Xray остаётся на тех же портах, но всё пускает напрямую,
@@ -588,6 +595,11 @@ def build_xray(s, nodes, enabled=True, log_path=None, checks=None, sticky=None):
                               {"tag": "block", "protocol": "blackhole"}]
 
     main_i, geo_i = pick_nodes(nodes, checks)
+    # Серверы, на которых недавно зависла связь, временно не берём
+    # (если без них никого не остаётся — берём всех).
+    if avoid:
+        main_i = [i for i in main_i if i not in avoid] or main_i
+        geo_i = [i for i in geo_i if i not in avoid] or geo_i
     main_sel = [f"n{i}" for i in main_i]
     geo_sel = [f"n{i}" for i in geo_i]
     cfg["observatory"] = {"subjectSelector": sorted(set(main_sel + geo_sel)),

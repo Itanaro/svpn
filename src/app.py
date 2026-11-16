@@ -62,7 +62,7 @@ TASK = "Svpn Interceptor"
 # При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
 # (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
 CLEANUP_TASK = "Svpn Cleanup"
-VERSION = "1.1.8"
+VERSION = "1.1.9"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -399,6 +399,8 @@ class Svpn:
         self.sticky = None          # ключ сервера для YouTube
         self.sticky_bad = {}        # ключ → когда отказал
         self.sticky_fails = 0
+        self.node_bad = {}          # ключ сервера → когда на нём зависла связь
+        self.fail_since = 0
         try:
             with open(CHECKS, encoding="utf-8") as f:
                 self.checks = json.load(f)
@@ -477,13 +479,17 @@ class Svpn:
         nodes = self.all_nodes()
         now = time.time()
         self.sticky_bad = {k: t for k, t in self.sticky_bad.items() if now - t < 1800}
-        si = E.pick_sticky(nodes, self.checks, self.sticky, set(self.sticky_bad))
+        self.node_bad = {k: t for k, t in self.node_bad.items() if now - t < 1800}
+        avoid = {i for i, (_, ob) in enumerate(nodes) if E.node_key(ob) in self.node_bad}
+        si = E.pick_sticky(nodes, self.checks, self.sticky,
+                           set(self.sticky_bad) | set(self.node_bad))
         new_key = E.node_key(nodes[si][1]) if si is not None else None
         if new_key != self.sticky and si is not None:
             log(f"YouTube держу на одном сервере: {nodes[si][0]}")
         self.sticky, self.sticky_fails = new_key, 0
         x = E.build_xray(self.s, nodes, enabled=on,
-                         log_path=XRAY_LOG, checks=self.checks, sticky=si)
+                         log_path=XRAY_LOG, checks=self.checks, sticky=si,
+                         avoid=avoid)
         sb = E.build_singbox(self.s, log_path=SB_LOG)
         changed = []
         for path, cfg in ((XRAY_CFG, x), (SB_CFG, sb)):
@@ -813,10 +819,14 @@ class Svpn:
         return res
 
     def watch(self):
-        """Встроенный сторож: раз в 20 секунд проверяет связь."""
+        """Встроенный сторож: раз в 20 секунд проверяет связь.
+
+        Если проверка не прошла — следующие идут каждые 4 секунды, чтобы обрыв
+        замечался и чинился быстро, а не через минуту.
+        """
         n = 0
         while True:
-            time.sleep(20)
+            time.sleep(4 if 0 < self.fails < 8 else 20)
             n += 1
             try:
                 self._watch_once(n)
@@ -844,14 +854,17 @@ class Svpn:
             log("VPN-движок остановился — перезапускаю")
             self.apply()
         try:
-            st, _ = self.probe()
+            st, _ = self.probe(timeout=8)
             ok = st == 204
         except Exception:
             ok = False
         prev = self.health
         if ok:
-            if self.fails >= 3:
-                log("связь восстановлена")
+            if self.fails >= 2:
+                gap = int(time.time() - self.fail_since) if self.fail_since else 0
+                log(f"связь восстановлена (перебой длился {gap} с)" if self.fail_since
+                    else "связь восстановлена")
+                self.fail_since = 0
                 self.interceptor(True)
             self.fails = 0
             self.health = "ok"
@@ -868,26 +881,79 @@ class Svpn:
                     pass
         else:
             self.fails += 1
-            if self.fails == 3:
+            if self.fails == 1:
+                self.fail_since = time.time()
+            if self.fails == 2:
                 log("нет связи с VPN — перезапускаю движок, пока всё идёт напрямую")
                 self.interceptor(False)
                 self.health = "bad"
                 self.problem = "Перезапускаю VPN. Пока всё идёт напрямую, интернет работает."
+                self.on_change()
+                self._diagnose()
                 with self.lock:
+                    self.write_configs()
                     self.start_xray()
-            elif self.fails == 6:
+            elif self.fails == 5:
                 log("перезапуск не помог — обновляю подписки")
                 self.refresh_subs()
                 self.apply(interceptor=False)
             elif self.fails % 15 == 0:
                 with self.lock:
                     self.start_xray()
-            if self.fails >= 3:
+            if self.fails >= 2:
                 self.health = "bad"
                 self.problem = ("Серверы VPN не отвечают. Пока всё идёт напрямую. "
                                 "Если долго не проходит — проверь подписку в настройках.")
         if prev != self.health:
             self.on_change()
+
+    def _diagnose(self):
+        """Обрыв: проверить каждый сервер отдельно и записать в журнал.
+
+        Серверы, которые не ответили, на 30 минут убираем из выбора — после
+        перезапуска движок возьмёт живой, а не тот, на котором всё зависло.
+        """
+        nodes = self.all_nodes()[:E.MAX_NODES]
+        res = [None] * len(nodes)
+
+        def one(i):
+            t0 = time.time()
+            try:
+                ok = self.probe_via(f"http://127.0.0.1:{E.TEST_PORT_BASE + i}",
+                                    timeout=6)[0] == 204
+            except Exception:
+                ok = False
+            res[i] = int((time.time() - t0) * 1000) if ok else None
+
+        th = [threading.Thread(target=one, args=(i,), daemon=True) for i in range(len(nodes))]
+        for x in th:
+            x.start()
+        for x in th:
+            x.join(8)
+        try:
+            req = urllib.request.Request("http://www.msftconnecttest.com/connecttest.txt",
+                                         headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                    req, timeout=5) as r:
+                net = r.status == 200
+        except Exception:
+            net = False
+        parts = [f"{name} — {ms} мс" if ms is not None else f"{name} — нет ответа"
+                 for (name, _), ms in zip(nodes, res)]
+        log("обрыв, серверы: " + "; ".join(parts)
+            + ("; интернет напрямую есть" if net else "; интернета нет совсем"))
+        dead = [i for i, ms in enumerate(res) if ms is None]
+        if not net:
+            log("похоже, пропал сам интернет — серверы не трогаю")
+        elif not dead:
+            log("все серверы отвечают — завис сам туннель, перезапуск его снимет")
+        elif len(dead) == len(nodes):
+            log("не отвечает ни один сервер — серверы не трогаю, проверь подписку")
+        else:
+            now = time.time()
+            for i in dead:
+                self.node_bad[E.node_key(nodes[i][1])] = now
+            log("убираю на 30 минут: " + ", ".join(nodes[i][0] for i in dead))
 
     def _watch_sticky(self):
         """Сервер для YouTube жив? Два отказа подряд — переезжаем на другой."""
