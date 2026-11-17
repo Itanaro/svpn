@@ -62,7 +62,7 @@ TASK = "Svpn Interceptor"
 # При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
 # (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
 CLEANUP_TASK = "Svpn Cleanup"
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -749,6 +749,7 @@ class Svpn:
             except Exception:
                 r["country"] = ""
             r["services"] = {}
+            r["gw_rule"] = 2          # проверка сайта Gemini по стране (с 1.2.1)
             for c in E.SERVICE_CHECKS:
                 try:
                     if c.get("full"):
@@ -866,6 +867,7 @@ class Svpn:
             stamps = [self.checks[k].get("at", 0) for k in keys if k in self.checks]
             # после обновления у старых проверок нет пункта «Gemini (сайт)» — проверяем заново
             stale = any("gemini_web" not in (self.checks[k].get("services") or {})
+                        or self.checks[k].get("gw_rule") != 2
                         for k in keys if k in self.checks and self.checks[k].get("alive"))
             if (len(stamps) < len(keys) or stale
                     or time.time() - min(stamps) > 24 * 3600):

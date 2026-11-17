@@ -456,6 +456,8 @@ MAX_NODES = 60
 GEMINI_WEB_DOMAINS = ["gemini.google.com", "gemini.google", "aistudio.google.com",
                       "alkalimakersuite-pa.clients6.google.com"]
 GEMINI_WEB_OK = "45631641,null,true"   # метка в странице, когда Gemini доступен
+# Страны, где сайт Gemini не работает (коды, как их пишет сама страница)
+GEMINI_WEB_BLOCKED = {"RUS", "BLR", "CHN", "HKG", "MAC", "IRN", "PRK", "CUB", "SYR"}
 
 SERVICE_CHECKS = [
     {"id": "gemini", "name": "Gemini", "strict": True,
@@ -487,7 +489,13 @@ def service_verdict(sid, status, body):
         # без ключа нормальный ответ — 401; из запретной страны — 403
         return status in (200, 401, 404, 405)
     if sid == "gemini_web":
-        return status == 200 and GEMINI_WEB_OK in (body or "")
+        # Главное — какую страну видит сайт: метка доступности у Google меняется
+        if status != 200:
+            return False
+        cc = gemini_web_country(body)
+        if cc:
+            return cc not in GEMINI_WEB_BLOCKED
+        return GEMINI_WEB_OK in (body or "")
     if sid == "openrouter":
         # бывает 403 «Access denied by security policy» на части выходов
         return status == 200

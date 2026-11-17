@@ -1,16 +1,16 @@
 {
- "version": "1.2.0",
- "notes": "Сайт Gemini теперь открывается только через серверы, которые он пускает: Svpn проверяет каждый сервер именно на gemini.google.com (раньше проверялся только API) и пишет в журнал, какие подходят. В списке появился пункт «Gemini в браузере».",
+ "version": "1.2.1",
+ "notes": "Исправлена проверка сайта Gemini: теперь сервер считается подходящим по стране, которую видит Gemini (в 1.2.0 все серверы ошибочно помечались как «не пускает»).",
  "mandatory": false,
  "files": [
   {
    "path": "app.py",
-   "sha256": "2ea1ee6fa133f9725183f296fe17930c66d4690a0e7a58cfd45a6a3fedb37837",
+   "sha256": "200080aebe1f2e3c1ba992d6f79fd5049bcc50b93022c0dc593ce6cc58fcca43",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
   },
   {
    "path": "engine.py",
-   "sha256": "aec25cff8b5f2d2df32ccd83afb5655781ef96db9ad472d19bb506f3872e4efd",
+   "sha256": "886d4bd008a74c1177c3f958d72727546d926ddaab7c73af771c75807bf040d6",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/engine.py"
   },
   {
