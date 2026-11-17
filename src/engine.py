@@ -74,6 +74,8 @@ def default_sites():
         S("YouTube",
           ["youtube.com", "youtu.be", "youtube-nocookie.com",
            "googlevideo.com", "ytimg.com", "ggpht.com"]),
+        S("Gemini в браузере", list(GEMINI_WEB_DOMAINS), geo=True,
+          note="сайт Gemini и AI Studio — только через серверы, которые Gemini пускает"),
         S("Claude", ["claude.ai", "claude.com", "anthropic.com",
                      "claudeusercontent.com"], geo=True),
         S("ChatGPT и Sora",
@@ -447,6 +449,14 @@ MAX_NODES = 60
 
 # Что проверяем на каждом сервере. strict=True — сервис капризен к стране:
 # сервер, не прошедший такую проверку, не попадёт в «европейский» контур.
+# Сайт Gemini сам решает, из какой страны человек, и бывает строже, чем
+# API: выход может открывать API, а сайт пишет «не поддерживается в вашей
+# стране». Поэтому сайт проверяем отдельно и пускаем только через
+# серверы, которые прошли эту проверку.
+GEMINI_WEB_DOMAINS = ["gemini.google.com", "gemini.google", "aistudio.google.com",
+                      "alkalimakersuite-pa.clients6.google.com"]
+GEMINI_WEB_OK = "45631641,null,true"   # метка в странице, когда Gemini доступен
+
 SERVICE_CHECKS = [
     {"id": "gemini", "name": "Gemini", "strict": True,
      "url": "https://generativelanguage.googleapis.com/v1beta/models?key=check"},
@@ -454,6 +464,8 @@ SERVICE_CHECKS = [
      "url": "https://api.anthropic.com/v1/models"},
     {"id": "openrouter", "name": "OpenRouter", "strict": True,
      "url": "https://openrouter.ai/api/v1/models"},
+    {"id": "gemini_web", "name": "Gemini (сайт)", "strict": False, "full": True,
+     "url": "https://gemini.google.com/"},
 ]
 
 
@@ -474,6 +486,8 @@ def service_verdict(sid, status, body):
     if sid == "claude":
         # без ключа нормальный ответ — 401; из запретной страны — 403
         return status in (200, 401, 404, 405)
+    if sid == "gemini_web":
+        return status == 200 and GEMINI_WEB_OK in (body or "")
     if sid == "openrouter":
         # бывает 403 «Access denied by security policy» на части выходов
         return status == 200
@@ -504,6 +518,23 @@ def pick_nodes(nodes, checks):
     if not main:
         main = [i for i in range(len(nodes))]
     return main, geo
+
+
+def gemini_web_country(body):
+    """Какую страну видит сайт Gemini (трёхбуквенный код) — для журнала."""
+    import re
+    m = re.search(r',2,1,200,"([A-Z]{3})"', body or "")
+    return m.group(1) if m else ""
+
+
+def pick_gemini_web(nodes, checks):
+    """Серверы, через которые сайт Gemini открывается."""
+    out = []
+    for i, (_, ob) in enumerate(nodes):
+        c = (checks or {}).get(node_key(ob)) or {}
+        if c.get("alive") and (c.get("services") or {}).get("gemini_web"):
+            out.append(i)
+    return out
 
 
 # Сайты, которым нельзя менять выход посреди работы: YouTube выдаёт ссылку на
@@ -615,6 +646,18 @@ def build_xray(s, nodes, enabled=True, log_path=None, checks=None, sticky=None,
         rules.append({"type": "field", "network": "udp", "port": "443",
                       "domain": doms, "outboundTag": "block"})
         rules.append({"type": "field", "domain": doms, "outboundTag": f"n{sticky}"})
+    gw_domains = [d for d in active_domains(s) if d in GEMINI_WEB_DOMAINS]
+    gw_i = [i for i in pick_gemini_web(nodes, checks) if i not in avoid] \
+        or pick_gemini_web(nodes, checks)
+    if gw_domains and gw_i:
+        cfg["routing"]["balancers"].append(
+            {"tag": "gweb", "selector": [f"n{i}" for i in gw_i],
+             "strategy": {"type": "leastPing"}})
+        cfg["observatory"]["subjectSelector"] = sorted(
+            set(cfg["observatory"]["subjectSelector"]) | {f"n{i}" for i in gw_i})
+        rules.append({"type": "field",
+                      "domain": ["domain:" + d for d in gw_domains],
+                      "balancerTag": "gweb"})
     geo_domains = active_domains(s, geo=True)
     if geo_sel and geo_domains:
         cfg["routing"]["balancers"].append(

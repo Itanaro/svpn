@@ -1,16 +1,16 @@
 {
- "version": "1.1.9",
- "notes": "Обрывы VPN чинятся быстрее: Svpn замечает пропажу связи примерно за 20–30 секунд вместо минуты и сразу уходит с зависшего сервера на 30 минут. В журнал пишется, какие серверы отвечали в момент обрыва. В список сайтов добавлены Instagram, WhatsApp и Facebook.",
+ "version": "1.2.0",
+ "notes": "Сайт Gemini теперь открывается только через серверы, которые он пускает: Svpn проверяет каждый сервер именно на gemini.google.com (раньше проверялся только API) и пишет в журнал, какие подходят. В списке появился пункт «Gemini в браузере».",
  "mandatory": false,
  "files": [
   {
    "path": "app.py",
-   "sha256": "9b966f181d4731493e46cdcd5caa02c63d834e75876086937bb5dbd0b424b13b",
+   "sha256": "2ea1ee6fa133f9725183f296fe17930c66d4690a0e7a58cfd45a6a3fedb37837",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
   },
   {
    "path": "engine.py",
-   "sha256": "ba8e117c7ee2c04f6e926fde949e968b1a0cca79c4f5b5f62dec66598aa0bec2",
+   "sha256": "aec25cff8b5f2d2df32ccd83afb5655781ef96db9ad472d19bb506f3872e4efd",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/engine.py"
   },
   {

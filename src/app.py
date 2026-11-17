@@ -62,7 +62,7 @@ TASK = "Svpn Interceptor"
 # При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
 # (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
 CLEANUP_TASK = "Svpn Cleanup"
-VERSION = "1.1.9"
+VERSION = "1.2.0"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -724,11 +724,14 @@ class Svpn:
                 {"http": proxy, "https": proxy}))
             r = {"name": name, "alive": False, "at": time.time()}
 
-            def get(url, timeout=12):
-                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            def get(url, timeout=12, size=600):
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                   "(KHTML, like Gecko) Chrome/140.0 Safari/537.36"),
+                    "Accept-Language": "en-US,en;q=0.9"})
                 try:
                     with opener.open(req, timeout=timeout) as resp:
-                        return resp.status, resp.read(600).decode("utf-8", "ignore")
+                        return resp.status, resp.read(size).decode("utf-8", "ignore")
                 except urllib.error.HTTPError as e:
                     return e.code, e.read(600).decode("utf-8", "ignore")
             try:
@@ -748,8 +751,13 @@ class Svpn:
             r["services"] = {}
             for c in E.SERVICE_CHECKS:
                 try:
-                    st, body = get(c["url"])
+                    if c.get("full"):
+                        st, body = get(c["url"], 20, 4_000_000)
+                    else:
+                        st, body = get(c["url"])
                     r["services"][c["id"]] = E.service_verdict(c["id"], st, body)
+                    if c["id"] == "gemini_web":
+                        r["gemini_cc"] = E.gemini_web_country(body)
                 except Exception:
                     r["services"][c["id"]] = False
             r["strict_ok"] = all(r["services"].get(c["id"]) for c in E.SERVICE_CHECKS
@@ -766,6 +774,14 @@ class Svpn:
             geo = sum(1 for r in res if r.get("strict_ok"))
             log(f"серверы проверены: живых {alive} из {len(res)}, "
                 f"для «Европы» подходят {geo}")
+            gw = [(name, r) for (name, _), r in zip(nodes, res) if r.get("alive")]
+            if gw:
+                log("сайт Gemini: " + "; ".join(
+                    f"{name} — {'открывается' if (r.get('services') or {}).get('gemini_web') else 'не пускает'}"
+                    + (f" (видит {r['gemini_cc']})" if r.get("gemini_cc") else "")
+                    for name, r in gw))
+                if not any((r.get("services") or {}).get("gemini_web") for _, r in gw):
+                    log("сайт Gemini не пускает ни один сервер — пока иду через «Европу»")
         finally:
             self.checking = False
         self.apply()
@@ -848,7 +864,11 @@ class Svpn:
         if self.health == "ok" and not self.checking and self.all_nodes():
             keys = {E.node_key(ob) for _, ob in self.all_nodes()}
             stamps = [self.checks[k].get("at", 0) for k in keys if k in self.checks]
-            if len(stamps) < len(keys) or time.time() - min(stamps) > 24 * 3600:
+            # после обновления у старых проверок нет пункта «Gemini (сайт)» — проверяем заново
+            stale = any("gemini_web" not in (self.checks[k].get("services") or {})
+                        for k in keys if k in self.checks and self.checks[k].get("alive"))
+            if (len(stamps) < len(keys) or stale
+                    or time.time() - min(stamps) > 24 * 3600):
                 threading.Thread(target=self.check_nodes, daemon=True).start()
         if not self.xray or self.xray.poll() is not None:
             log("VPN-движок остановился — перезапускаю")
