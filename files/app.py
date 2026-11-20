@@ -48,6 +48,7 @@ os.makedirs(SUBS_DIR, exist_ok=True)
 XRAY_CFG = os.path.join(DATA, "xray.json")
 SB_CFG = os.path.join(DATA, "singbox.json")
 CHECKS = os.path.join(DATA, "checks.json")
+BENCH = os.path.join(DATA, "bench.json")      # сбоящие серверы: на сколько убраны
 LOG_FILE = os.path.join(DATA, "svpn.log")
 XRAY_LOG = os.path.join(DATA, "xray_error.log")
 SB_LOG = os.path.join(DATA, "singbox.log")
@@ -62,7 +63,7 @@ TASK = "Svpn Interceptor"
 # При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
 # (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
 CLEANUP_TASK = "Svpn Cleanup"
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -399,8 +400,20 @@ class Svpn:
         self.sticky = None          # ключ сервера для YouTube
         self.sticky_bad = {}        # ключ → когда отказал
         self.sticky_fails = 0
-        self.node_bad = {}          # ключ сервера → когда на нём зависла связь
+        self.node_bad = {}          # ключ сервера → до какого времени не берём
+        self.strikes = {}           # ключ сервера → [сколько раз сбоил, когда последний]
         self.fail_since = 0
+        self.speed_busy = False     # идёт замер скорости для YouTube
+        self.speed_round = 0
+        self.sticky_slow = 0        # сколько замеров подряд сервер YouTube медленный
+        self.next_speed = time.time() + 120
+        try:
+            with open(BENCH, encoding="utf-8") as f:
+                b = json.load(f)
+            self.node_bad = {k: float(v) for k, v in (b.get("bad") or {}).items()}
+            self.strikes = {k: list(v) for k, v in (b.get("strikes") or {}).items()}
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
         try:
             with open(CHECKS, encoding="utf-8") as f:
                 self.checks = json.load(f)
@@ -479,7 +492,7 @@ class Svpn:
         nodes = self.all_nodes()
         now = time.time()
         self.sticky_bad = {k: t for k, t in self.sticky_bad.items() if now - t < 1800}
-        self.node_bad = {k: t for k, t in self.node_bad.items() if now - t < 1800}
+        self.node_bad = {k: u for k, u in self.node_bad.items() if u > now}
         avoid = {i for i, (_, ob) in enumerate(nodes) if E.node_key(ob) in self.node_bad}
         si = E.pick_sticky(nodes, self.checks, self.sticky,
                            set(self.sticky_bad) | set(self.node_bad))
@@ -894,6 +907,10 @@ class Svpn:
             if not process_running("sing-box.exe"):
                 self.interceptor(True)
             self._watch_sticky()
+            if (not self.speed_busy and not self.checking
+                    and time.time() >= self.next_speed):
+                self.speed_busy = True
+                threading.Thread(target=self._speed_tune, daemon=True).start()
             if n % 30 == 1 or not self.exit:
                 try:
                     st, body = self.probe("https://api.country.is/", 15)
@@ -968,14 +985,42 @@ class Svpn:
         if not net:
             log("похоже, пропал сам интернет — серверы не трогаю")
         elif not dead:
-            log("все серверы отвечают — завис сам туннель, перезапуск его снимет")
+            # Все отвечают — значит, на миг сбоил тот, через который шёл движок.
+            # Движок берёт самый быстрый по пингу, его и считаем виноватым.
+            alive = [i for i, ms in enumerate(res) if ms is not None]
+            if len(alive) > 1:
+                i = min(alive, key=lambda j: res[j])
+                log("все серверы отвечают — на миг сбоил тот, через который шёл движок "
+                    f"(самый быстрый — {nodes[i][0]}); " + self._bench(nodes[i]))
+            else:
+                log("все серверы отвечают — завис сам туннель, перезапуск его снимет")
         elif len(dead) == len(nodes):
             log("не отвечает ни один сервер — серверы не трогаю, проверь подписку")
         else:
-            now = time.time()
-            for i in dead:
-                self.node_bad[E.node_key(nodes[i][1])] = now
-            log("убираю на 30 минут: " + ", ".join(nodes[i][0] for i in dead))
+            log("не отвечают: " + "; ".join(self._bench(nodes[i]) for i in dead))
+
+    def _bench(self, node):
+        """Убрать сбоящий сервер из выбора. Чем чаще сбоит, тем дольше:
+        30 мин, 1 ч, 2 ч … до 12 ч. Счёт сбрасывается после 12 ч без сбоев."""
+        name, ob = node
+        key = E.node_key(ob)
+        now = time.time()
+        cnt, last = (self.strikes.get(key) or [0, 0])[:2]
+        if now - last > 12 * 3600:
+            cnt = 0
+        cnt += 1
+        minutes = min(30 * 2 ** (cnt - 1), 720)
+        self.strikes[key] = [cnt, now]
+        self.node_bad[key] = max(self.node_bad.get(key, 0), now + minutes * 60)
+        self.strikes = {k: v for k, v in self.strikes.items() if now - v[1] < 12 * 3600}
+        try:
+            with open(BENCH, "w", encoding="utf-8") as f:
+                json.dump({"bad": self.node_bad, "strikes": self.strikes}, f)
+        except OSError:
+            pass
+        span = f"{minutes} мин" if minutes < 60 else f"{minutes // 60} ч"
+        return (f"убираю {name} на {span}"
+                + (f" (сбоит {cnt}-й раз за 12 ч)" if cnt > 1 else ""))
 
     def _watch_sticky(self):
         """Сервер для YouTube жив? Два отказа подряд — переезжаем на другой."""
@@ -1000,6 +1045,77 @@ class Svpn:
             self.sticky_bad[self.sticky] = time.time()
             self.sticky = None
             self.apply()
+
+    def _speed_via(self, i, timeout=15):
+        """Скорость скачивания через сервер №i, Мбит/с (None — не вышло)."""
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler(
+            {"http": f"http://127.0.0.1:{E.TEST_PORT_BASE + i}",
+             "https": f"http://127.0.0.1:{E.TEST_PORT_BASE + i}"}))
+        req = urllib.request.Request(E.SPEED_URL, headers={"User-Agent": "Mozilla/5.0"})
+        t0 = time.time()
+        got = 0
+        try:
+            with opener.open(req, timeout=timeout) as r:
+                while time.time() - t0 < timeout:
+                    chunk = r.read(65536)
+                    if not chunk:
+                        break
+                    got += len(chunk)
+        except Exception:
+            pass
+        if got < 1_000_000:
+            return None
+        return got * 8 / max(time.time() - t0, 0.05) / 1e6
+
+    def _speed_tune(self):
+        """Раз в 10 минут: не стал ли сервер YouTube медленным.
+
+        Скорость каждого сервера меряется по очереди (4 МБ). Если сервер YouTube
+        два замера подряд вдвое медленнее лучшего (и меньше 25 Мбит/с) —
+        переезжаем на лучший. Первый замер после запуска переключает сразу.
+        """
+        try:
+            if not self.sticky or not E.sticky_domains(self.s) or self.health != "ok":
+                return
+            nodes = self.all_nodes()[:E.MAX_NODES]
+            now = time.time()
+            avoid = set(self.sticky_bad) | {k for k, u in self.node_bad.items() if u > now}
+            main_i, _ = E.pick_nodes(nodes, self.checks)
+            cand = [i for i in main_i if E.node_key(nodes[i][1]) not in avoid]
+            cur = next((i for i, (_, ob) in enumerate(nodes)
+                        if E.node_key(ob) == self.sticky), None)
+            if cur is None or len(cand) < 2:
+                return
+            if cur not in cand:
+                cand.append(cur)
+            speeds = {i: self._speed_via(i) for i in cand}
+            first = self.speed_round == 0
+            self.speed_round += 1
+            if first or self.speed_round % 6 == 1:        # в журнал — раз в час
+                log("скорость серверов для YouTube: " + "; ".join(
+                    f"{nodes[i][0]} — " + (f"{speeds[i]:.0f} Мбит/с" if speeds[i] else "не вышло")
+                    + (" (сейчас)" if i == cur else "") for i in cand))
+            ok = [i for i in cand if speeds[i]]
+            cs = speeds.get(cur)
+            if not ok or not cs:
+                self.sticky_slow = 0
+                return
+            best = max(ok, key=lambda i: speeds[i])
+            if best == cur or not (speeds[best] >= 2 * cs and cs < 25):
+                self.sticky_slow = 0
+                return
+            self.sticky_slow += 1
+            if self.sticky_slow >= 2 or first:
+                log(f"YouTube: {nodes[cur][0]} медленный ({cs:.0f} Мбит/с), "
+                    f"{nodes[best][0]} быстрее ({speeds[best]:.0f} Мбит/с) — переезжаю")
+                self.sticky = E.node_key(nodes[best][1])
+                self.sticky_slow = 0
+                self.apply()
+        except Exception as e:
+            log(f"замер скорости споткнулся: {e}")
+        finally:
+            self.speed_busy = False
+            self.next_speed = time.time() + 600
 
     def probe_via(self, proxy, url=E.PROBE_URL, timeout=10):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler(

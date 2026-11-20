@@ -1,16 +1,16 @@
 {
- "version": "1.2.1",
- "notes": "Исправлена проверка сайта Gemini: теперь сервер считается подходящим по стране, которую видит Gemini (в 1.2.0 все серверы ошибочно помечались как «не пускает»).",
+ "version": "1.2.2",
+ "notes": "Сбоящий сервер теперь убирается из выбора тем дольше, чем чаще сбоит (30 мин → 1 ч → 2 ч … до 12 ч), и это помнится после перезагрузки — меньше обрывов. YouTube раз в 10 минут проверяет скорость серверов и переезжает на быстрый, если текущий заметно медленнее.",
  "mandatory": false,
  "files": [
   {
    "path": "app.py",
-   "sha256": "200080aebe1f2e3c1ba992d6f79fd5049bcc50b93022c0dc593ce6cc58fcca43",
+   "sha256": "e5e26c26f6820d2bbc86b923dd3bb99ca299525d61973dd258b04d6ab1dbb664",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
   },
   {
    "path": "engine.py",
-   "sha256": "886d4bd008a74c1177c3f958d72727546d926ddaab7c73af771c75807bf040d6",
+   "sha256": "d3f7f07d11db09ac641defb85d5ce5fb73b95a1a55b393af17f05e30f0b4e165",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/engine.py"
   },
   {

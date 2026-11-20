@@ -29,6 +29,7 @@ IPAD_PORT = 10880
 UI_PORT = 10870
 IPAD_PAC_PORT = 10881
 PROBE_URL = "https://www.gstatic.com/generate_204"
+SPEED_URL = "https://speed.cloudflare.com/__down?bytes=4000000"   # замер скорости серверов
 
 # Свои сети никогда не идут через туннель.
 PRIVATE_NETS = [
