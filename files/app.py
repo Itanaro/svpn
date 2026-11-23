@@ -63,7 +63,7 @@ TASK = "Svpn Interceptor"
 # При включении компьютера и входе в Windows гасит перехватчик, если он «проснулся» сам
 # (быстрый запуск Windows): без Svpn он вёл бы программы в пустоту. Svpn потом запустит его сам.
 CLEANUP_TASK = "Svpn Cleanup"
-VERSION = "1.2.2"
+VERSION = "1.2.3"
 # Канал обновлений: файлы в репозитории Itanaro/svpn на GitHub (как у Проявки).
 UPDATE_URL = "https://raw.githubusercontent.com/Itanaro/svpn/main/manifest.json"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -407,11 +407,15 @@ class Svpn:
         self.speed_round = 0
         self.sticky_slow = 0        # сколько замеров подряд сервер YouTube медленный
         self.next_speed = time.time() + 120
+        self.speeds = {}            # ключ сервера → последние замеры [[Мбит/с, когда], ...]
+        self.speed_sets = (set(), set())   # (медленные, быстрые) — по ключам
         try:
             with open(BENCH, encoding="utf-8") as f:
                 b = json.load(f)
             self.node_bad = {k: float(v) for k, v in (b.get("bad") or {}).items()}
             self.strikes = {k: list(v) for k, v in (b.get("strikes") or {}).items()}
+            self.speeds = {k: [list(x) for x in v][-3:]
+                           for k, v in (b.get("speeds") or {}).items()}
         except (OSError, ValueError, TypeError, AttributeError):
             pass
         try:
@@ -500,9 +504,12 @@ class Svpn:
         if new_key != self.sticky and si is not None:
             log(f"YouTube держу на одном сервере: {nodes[si][0]}")
         self.sticky, self.sticky_fails = new_key, 0
+        slow, fast = E.speed_groups(nodes, self.speeds)
+        self.speed_sets = ({E.node_key(nodes[i][1]) for i in slow},
+                           {E.node_key(nodes[i][1]) for i in fast})
         x = E.build_xray(self.s, nodes, enabled=on,
                          log_path=XRAY_LOG, checks=self.checks, sticky=si,
-                         avoid=avoid)
+                         avoid=avoid, slow=slow, fast=fast)
         sb = E.build_singbox(self.s, log_path=SB_LOG)
         changed = []
         for path, cfg in ((XRAY_CFG, x), (SB_CFG, sb)):
@@ -521,7 +528,7 @@ class Svpn:
         self.stop_xray()
         # Чужие процессы на наших портах (например, старый туннель) — снимаем.
         mine = {self.xray.pid} if self.xray else set()
-        for pid in listening_pids({E.HTTP_PORT, E.SOCKS_PORT, E.IPAD_PORT}) - mine:
+        for pid in listening_pids({E.HTTP_PORT, E.SOCKS_PORT, E.IPAD_PORT, E.FAST_PORT}) - mine:
             run(["taskkill", "/F", "/PID", str(pid)], 20)
             log(f"порт туннеля занимала другая программа (PID {pid}) — закрыла её")
         env = dict(os.environ, XRAY_LOCATION_ASSET=BIN)
@@ -863,6 +870,14 @@ class Svpn:
             except Exception as e:
                 log(f"сторож споткнулся: {e}")
 
+    def _save_bench(self):
+        try:
+            with open(BENCH, "w", encoding="utf-8") as f:
+                json.dump({"bad": self.node_bad, "strikes": self.strikes,
+                           "speeds": self.speeds}, f)
+        except OSError:
+            pass
+
     def _watch_once(self, n):
         if time.time() - self.last_sub > 6 * 3600:
             if self.refresh_subs():
@@ -1013,11 +1028,7 @@ class Svpn:
         self.strikes[key] = [cnt, now]
         self.node_bad[key] = max(self.node_bad.get(key, 0), now + minutes * 60)
         self.strikes = {k: v for k, v in self.strikes.items() if now - v[1] < 12 * 3600}
-        try:
-            with open(BENCH, "w", encoding="utf-8") as f:
-                json.dump({"bad": self.node_bad, "strikes": self.strikes}, f)
-        except OSError:
-            pass
+        self._save_bench()
         span = f"{minutes} мин" if minutes < 60 else f"{minutes // 60} ч"
         return (f"убираю {name} на {span}"
                 + (f" (сбоит {cnt}-й раз за 12 ч)" if cnt > 1 else ""))
@@ -1068,48 +1079,72 @@ class Svpn:
         return got * 8 / max(time.time() - t0, 0.05) / 1e6
 
     def _speed_tune(self):
-        """Раз в 10 минут: не стал ли сервер YouTube медленным.
+        """Раз в 10 минут меряем скорость скачивания через каждый сервер (4 МБ).
 
-        Скорость каждого сервера меряется по очереди (4 МБ). Если сервер YouTube
-        два замера подряд вдвое медленнее лучшего (и меньше 25 Мбит/с) —
-        переезжаем на лучший. Первый замер после запуска переключает сразу.
+        1) Медленные (обычно < 5 Мбит/с) убираются из общего выбора, а Телеграм
+           ходит только через быстрые — иначе тяжёлые файлы качаются по капле
+           через сервер, который просто быстрее всех ответил на «пинг».
+        2) YouTube: если его сервер два замера подряд вдвое медленнее лучшего
+           (и меньше 25 Мбит/с) — переезжаем на лучший. Первый замер после
+           запуска переключает сразу.
         """
         try:
-            if not self.sticky or not E.sticky_domains(self.s) or self.health != "ok":
+            if self.health != "ok":
                 return
             nodes = self.all_nodes()[:E.MAX_NODES]
             now = time.time()
-            avoid = set(self.sticky_bad) | {k for k, u in self.node_bad.items() if u > now}
+            bad = {k for k, u in self.node_bad.items() if u > now}
             main_i, _ = E.pick_nodes(nodes, self.checks)
-            cand = [i for i in main_i if E.node_key(nodes[i][1]) not in avoid]
+            cand = [i for i in main_i if E.node_key(nodes[i][1]) not in bad]
+            yt = bool(self.sticky and E.sticky_domains(self.s))
             cur = next((i for i, (_, ob) in enumerate(nodes)
-                        if E.node_key(ob) == self.sticky), None)
-            if cur is None or len(cand) < 2:
-                return
-            if cur not in cand:
+                        if E.node_key(ob) == self.sticky), None) if yt else None
+            if cur is not None and cur not in cand:
                 cand.append(cur)
+            if len(cand) < 2:
+                return
             speeds = {i: self._speed_via(i) for i in cand}
+            now = time.time()
+            for i, v in speeds.items():
+                key = E.node_key(nodes[i][1])
+                self.speeds[key] = (self.speeds.get(key) or [])[-2:] + [[round(v or 0, 1), now]]
+            keys = {E.node_key(ob) for _, ob in nodes}
+            self.speeds = {k: v for k, v in self.speeds.items() if k in keys}
+            self._save_bench()
             first = self.speed_round == 0
             self.speed_round += 1
             if first or self.speed_round % 6 == 1:        # в журнал — раз в час
-                log("скорость серверов для YouTube: " + "; ".join(
+                log("скорость серверов: " + "; ".join(
                     f"{nodes[i][0]} — " + (f"{speeds[i]:.0f} Мбит/с" if speeds[i] else "не вышло")
-                    + (" (сейчас)" if i == cur else "") for i in cand))
+                    + (" (YouTube)" if i == cur else "") for i in cand))
+            need = False
+            # 1) медленные / быстрые
+            slow, fast = E.speed_groups(nodes, self.speeds)
+            sets = ({E.node_key(nodes[i][1]) for i in slow},
+                    {E.node_key(nodes[i][1]) for i in fast})
+            if sets != self.speed_sets:
+                names = lambda ix: ", ".join(nodes[i][0] for i in sorted(ix)) or "нет"
+                log(f"по скорости: медленные — {names(slow)}; "
+                    f"для Телеграма — {names(fast)}")
+                need = True
+            # 2) YouTube
             ok = [i for i in cand if speeds[i]]
-            cs = speeds.get(cur)
-            if not ok or not cs:
+            cs = speeds.get(cur) if cur is not None else None
+            if not yt or not ok or not cs:
                 self.sticky_slow = 0
-                return
-            best = max(ok, key=lambda i: speeds[i])
-            if best == cur or not (speeds[best] >= 2 * cs and cs < 25):
-                self.sticky_slow = 0
-                return
-            self.sticky_slow += 1
-            if self.sticky_slow >= 2 or first:
-                log(f"YouTube: {nodes[cur][0]} медленный ({cs:.0f} Мбит/с), "
-                    f"{nodes[best][0]} быстрее ({speeds[best]:.0f} Мбит/с) — переезжаю")
-                self.sticky = E.node_key(nodes[best][1])
-                self.sticky_slow = 0
+            else:
+                best = max(ok, key=lambda i: speeds[i])
+                if best == cur or not (speeds[best] >= 2 * cs and cs < 25):
+                    self.sticky_slow = 0
+                else:
+                    self.sticky_slow += 1
+                    if self.sticky_slow >= 2 or first:
+                        log(f"YouTube: {nodes[cur][0]} медленный ({cs:.0f} Мбит/с), "
+                            f"{nodes[best][0]} быстрее ({speeds[best]:.0f} Мбит/с) — переезжаю")
+                        self.sticky = E.node_key(nodes[best][1])
+                        self.sticky_slow = 0
+                        need = True
+            if need:
                 self.apply()
         except Exception as e:
             log(f"замер скорости споткнулся: {e}")

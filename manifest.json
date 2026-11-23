@@ -1,16 +1,16 @@
 {
- "version": "1.2.2",
- "notes": "Сбоящий сервер теперь убирается из выбора тем дольше, чем чаще сбоит (30 мин → 1 ч → 2 ч … до 12 ч), и это помнится после перезагрузки — меньше обрывов. YouTube раз в 10 минут проверяет скорость серверов и переезжает на быстрый, если текущий заметно медленнее.",
+ "version": "1.2.3",
+ "notes": "Телеграм больше не качает «по капле»: Svpn раз в 10 минут меряет скорость каждого сервера, медленные (меньше 5 Мбит/с) убирает из выбора, а программу Telegram ведёт только через самые быстрые серверы.",
  "mandatory": false,
  "files": [
   {
    "path": "app.py",
-   "sha256": "e5e26c26f6820d2bbc86b923dd3bb99ca299525d61973dd258b04d6ab1dbb664",
+   "sha256": "75c94c9e2212eab220e3adc2ff72e9bab5766ac741dcb2f6a67dc96caf65bac3",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
   },
   {
    "path": "engine.py",
-   "sha256": "d3f7f07d11db09ac641defb85d5ce5fb73b95a1a55b393af17f05e30f0b4e165",
+   "sha256": "b1ff8e119728857260f3de24fb5adb6df69e6b740839c030ffc2fdfdcf74fec0",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/engine.py"
   },
   {

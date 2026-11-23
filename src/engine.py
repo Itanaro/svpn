@@ -11,6 +11,8 @@
 Порты Xray (для программ, которые настраиваются вручную):
     127.0.0.1:10877  HTTP-прокси   (Гермес, мост Проявки)
     127.0.0.1:10878  SOCKS5        (Телеграм)
+    127.0.0.1:10882  SOCKS5 «быстрый» — сюда перехватчик шлёт Телеграм:
+                     только серверы с хорошей скоростью скачивания
     0.0.0.0:10880    HTTP для айпада (пускает только домашнюю сеть и Tailscale)
 
 Модуль не зависит от Windows: всё, что про процессы и реестр, — в app.py.
@@ -26,6 +28,7 @@ import urllib.request
 HTTP_PORT = 10877
 SOCKS_PORT = 10878
 IPAD_PORT = 10880
+FAST_PORT = 10882
 UI_PORT = 10870
 IPAD_PAC_PORT = 10881
 PROBE_URL = "https://www.gstatic.com/generate_204"
@@ -37,6 +40,11 @@ PRIVATE_NETS = [
     "169.254.0.0/16", "100.64.0.0/10", "224.0.0.0/4", "255.255.255.255/32",
     "fc00::/7", "fe80::/10", "ff00::/8",
 ]
+
+# Программы, которые качают тяжёлые файлы: их ведём только через серверы
+# с хорошей скоростью (по замерам), а не через тот, что быстрее ответил.
+FAST_APPS = ["telegram.exe"]
+SLOW_MBPS = 5          # сервер медленнее этого — не годится ни для чего тяжёлого
 
 # Программы, которым перехват не нужен никогда: сам туннель и Tailscale.
 ALWAYS_DIRECT_APPS = [
@@ -579,8 +587,33 @@ def pick_sticky(nodes, checks, current=None, avoid=()):
     return min(ok, key=score)
 
 
+def speed_groups(nodes, speeds, now=None, max_age=6 * 3600):
+    """По замерам скорости: (медленные, быстрые) — множества индексов серверов.
+
+    speeds — {node_key: [[Мбит/с или 0, когда], ...]} — последние замеры.
+    Сервер медленный, если по последним замерам (не меньше двух) у него
+    обычно меньше SLOW_MBPS. Быстрые — те, у кого обычно не меньше половины
+    скорости лучшего. Пока замеров мало — оба множества пустые.
+    """
+    import time as _t
+    now = now or _t.time()
+    med = {}
+    for i, (_, ob) in enumerate(nodes[:MAX_NODES]):
+        hist = [v for v, at in (speeds or {}).get(node_key(ob)) or []
+                if now - at < max_age]
+        if len(hist) >= 2:
+            hs = sorted(hist)
+            med[i] = hs[(len(hs) - 1) // 2]        # «обычная» скорость, с запасом вниз
+    if not med:
+        return set(), set()
+    slow = {i for i, v in med.items() if v < SLOW_MBPS}
+    best = max(med.values())
+    fast = {i for i, v in med.items() if v >= max(SLOW_MBPS, best / 2)}
+    return slow, fast
+
+
 def build_xray(s, nodes, enabled=True, log_path=None, checks=None, sticky=None,
-               avoid=()):
+               avoid=(), slow=(), fast=()):
     """nodes — список (название, outbound) из всех подписок.
 
     enabled=False: Xray остаётся на тех же портах, но всё пускает напрямую,
@@ -596,6 +629,9 @@ def build_xray(s, nodes, enabled=True, log_path=None, checks=None, sticky=None,
              "protocol": "http", "settings": {"allowTransparent": False},
              "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}},
             {"tag": "socks-in", "port": SOCKS_PORT, "listen": "127.0.0.1",
+             "protocol": "socks", "settings": {"udp": True, "auth": "noauth"},
+             "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}},
+            {"tag": "fast-in", "port": FAST_PORT, "listen": "127.0.0.1",
              "protocol": "socks", "settings": {"udp": True, "auth": "noauth"},
              "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}},
         ],
@@ -640,13 +676,24 @@ def build_xray(s, nodes, enabled=True, log_path=None, checks=None, sticky=None,
     if avoid:
         main_i = [i for i in main_i if i not in avoid] or main_i
         geo_i = [i for i in geo_i if i not in avoid] or geo_i
+    # Медленные по замерам серверы тоже не берём: у них может быть хороший
+    # отклик, и «самый быстро отвечающий» выбирает их, а качают они по капле.
+    if slow:
+        main_i = [i for i in main_i if i not in slow] or main_i
+        geo_i = [i for i in geo_i if i not in slow] or geo_i
+    # Для тяжёлых программ (Телеграм) — только серверы с хорошей скоростью.
+    fast_i = [i for i in main_i if i in set(fast or ())] or main_i
     main_sel = [f"n{i}" for i in main_i]
     geo_sel = [f"n{i}" for i in geo_i]
-    cfg["observatory"] = {"subjectSelector": sorted(set(main_sel + geo_sel)),
+    fast_sel = [f"n{i}" for i in fast_i]
+    cfg["observatory"] = {"subjectSelector": sorted(set(main_sel + geo_sel + fast_sel)),
                           "probeURL": PROBE_URL, "probeInterval": "30s",
                           "enableConcurrency": True}
     cfg["routing"]["balancers"].append(
         {"tag": "auto", "selector": main_sel, "strategy": {"type": "leastPing"}})
+    cfg["routing"]["balancers"].append(
+        {"tag": "fast", "selector": fast_sel, "strategy": {"type": "leastPing"}})
+    rules.append({"type": "field", "inboundTag": ["fast-in"], "balancerTag": "fast"})
     st_domains = sticky_domains(s)
     if sticky is not None and 0 <= sticky < len(nodes) and st_domains:
         doms = ["domain:" + d for d in st_domains]
@@ -658,6 +705,7 @@ def build_xray(s, nodes, enabled=True, log_path=None, checks=None, sticky=None,
     gw_domains = [d for d in active_domains(s) if d in GEMINI_WEB_DOMAINS]
     gw_i = [i for i in pick_gemini_web(nodes, checks) if i not in avoid] \
         or pick_gemini_web(nodes, checks)
+    gw_i = [i for i in gw_i if i not in set(slow or ())] or gw_i
     if gw_domains and gw_i:
         cfg["routing"]["balancers"].append(
             {"tag": "gweb", "selector": [f"n{i}" for i in gw_i],
@@ -692,6 +740,10 @@ def build_singbox(s, log_path=None):
         {"ip_is_private": True, "outbound": "direct"},
         {"ip_cidr": ["100.64.0.0/10"], "outbound": "direct"},
     ]
+    fast = [n for n in names if n.lower() in FAST_APPS]
+    names = [n for n in names if n.lower() not in FAST_APPS]
+    if fast:
+        rules.append({"process_name": fast, "outbound": "vpn-fast"})
     if names:
         rules.append({"process_name": names, "outbound": "vpn"})
     if paths:
@@ -718,6 +770,8 @@ def build_singbox(s, log_path=None):
             {"type": "direct", "tag": "direct"},
             {"type": "socks", "tag": "vpn", "server": "127.0.0.1",
              "server_port": SOCKS_PORT, "version": "5"},
+            {"type": "socks", "tag": "vpn-fast", "server": "127.0.0.1",
+             "server_port": FAST_PORT, "version": "5"},
         ],
         "route": {
             "rules": rules,
