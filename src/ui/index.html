@@ -627,7 +627,7 @@ input::placeholder, textarea::placeholder { color: var(--ink-3); }
     </div>
 
     <div class="block line">
-      <div><h2>Версия <span id="ver"></span></h2><div class="hint">Обновления приходят сами — Svpn проверяет их при запуске и раз в 6 часов</div></div>
+      <div><h2>Версия <span id="ver"></span></h2><div class="hint" id="verHint">Обновления приходят сами — Svpn проверяет их при запуске и раз в 6 часов</div></div>
       <button class="btn" id="checkUpd">Проверить</button>
     </div>
 
@@ -797,6 +797,14 @@ function render(st) {
     $('updNotes').textContent = st.update_status ? '' : (u.notes || '');
     $('updBtn').hidden = !!st.update_status && !(u && st.update_status.startsWith('Обновление не встало'));
   }
+  // Тот же выбор — прямо в блоке «Версия», чтобы не листать наверх.
+  const cu = $('checkUpd'), canUpd = !!u && !$('updBtn').hidden;
+  cu.textContent = canUpd ? `Обновить до ${u.version}` : 'Проверить';
+  cu.classList.toggle('primary', canUpd);
+  cu.disabled = !!st.update_status && !canUpd;
+  $('verHint').textContent = st.update_status
+    || (u ? (u.mandatory ? 'Нужно обновиться. ' : 'Вышла новая версия. ') + (u.notes || '')
+          : 'Обновления приходят сами — Svpn проверяет их при запуске и раз в 6 часов');
   stick();
   $('log').innerHTML = (st.log || []).slice().reverse().map(l => `<div><time>${esc(l[0])}</time>${esc(l[1])}</div>`).join('');
 }
@@ -862,7 +870,9 @@ $('phoneTokForm').onsubmit = e => { e.preventDefault(); const v = $('phoneTok').
 $('phonePub').onclick = () => act('phone_publish', {}, 'Профиль обновлён');
 $('phoneOff').onclick = () => act('phone_forget', {}, 'Отключено');
 $('updBtn').onclick = () => act('update', {}, 'Скачиваю обновление');
-$('checkUpd').onclick = () => act('check_update', {}).then(() => { if (!S.update) toast('Стоит последняя версия'); });
+$('checkUpd').onclick = () => (S.update && !$('updBtn').hidden)
+  ? act('update', {}, 'Скачиваю обновление')
+  : act('check_update', {}).then(() => { if (!S.update) toast('Стоит последняя версия'); });
 $('checkNodes').onclick = () => act('check_nodes', {}, 'Проверяю серверы');
 $('check').onclick = async () => {
   $('checks').innerHTML = '<li>Проверяю…</li>';

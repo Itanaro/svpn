@@ -1,11 +1,11 @@
 {
- "version": "1.2.3",
- "notes": "Телеграм больше не качает «по капле»: Svpn раз в 10 минут меряет скорость каждого сервера, медленные (меньше 5 Мбит/с) убирает из выбора, а программу Telegram ведёт только через самые быстрые серверы.",
+ "version": "1.2.4",
+ "notes": "Кнопка «Обновить» теперь есть прямо в блоке «Версия» в Настройках — не нужно листать наверх. Плюс из 1.2.3: Телеграм больше не качает «по капле» — медленные серверы убираются из выбора, Telegram идёт только через быстрые.",
  "mandatory": false,
  "files": [
   {
    "path": "app.py",
-   "sha256": "75c94c9e2212eab220e3adc2ff72e9bab5766ac741dcb2f6a67dc96caf65bac3",
+   "sha256": "80bb02494eb514e53a944ae2e94af6912d43b628dd0dbb1e72b0ca9d0be37575",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/app.py"
   },
   {
@@ -40,7 +40,7 @@
   },
   {
    "path": "ui/index.html",
-   "sha256": "3b8b4d9b123f21cedd402ec3889dd5b84c43d32e31b97f5f825a559438184e7b",
+   "sha256": "e1f3d515999799ebd24626814498d9f08747ac889218efd2f3b8a69a9ebdadc6",
    "url": "https://raw.githubusercontent.com/Itanaro/svpn/main/files/ui/index.html"
   },
   {
